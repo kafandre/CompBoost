@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compboost"
+version = "0.1.0"
+authors = [
+  { name="André Kafanke", email="andre.kafanke@outlook.com" },
+]
+description = "A high-performance, tensor-vectorized Component-wise Gradient Boosting library in PyTorch."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "scikit-learn>=1.0.0",
+    "numpy>=1.21.0",
+    "scipy>=1.7.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/kafandre/CompBoost"
+"Bug Tracker" = "https://github.com/kafandre/CompBoost/issues"
