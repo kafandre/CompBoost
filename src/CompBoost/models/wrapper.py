@@ -2,8 +2,6 @@ import numpy as np
 import torch
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
-
-# Adjust this import based on your exact file structure
 from .ComponentwiseBoostingModel import ComponentwiseBoostingModel
 
 class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
@@ -30,7 +28,7 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
 
-        # 2. Initialize your PyTorch engine
+        # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(
             n_estimators=self.n_estimators,
             learning_rate=self.learning_rate,
@@ -40,7 +38,7 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             device=self.device
         )
 
-        # 3. Fit the model (your engine already handles converting arrays to tensors)
+        # 3. Fit the model
         self.model_.fit(X, y)
         
         # 4. Mark as fitted for scikit-learn
