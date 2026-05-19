@@ -28,3 +28,6 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/kafandre/CompBoost"
 "Bug Tracker" = "https://github.com/kafandre/CompBoost/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

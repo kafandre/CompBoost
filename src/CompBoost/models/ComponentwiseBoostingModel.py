@@ -430,7 +430,7 @@ class ComponentwiseBoostingModel:
             X_binned_list = []
             for f_idx in range(n_features):
                 edges, _ = torch.sort(self.all_bin_edges[f_idx])
-                binned = torch.bucketize(X_train_contig[:, f_idx], edges)
+                binned = torch.bucketize(X_train_contig[:, f_idx].contiguous(), edges)
                 binned = torch.clamp(binned - 1, 0, self.n_bins - 1)
                 X_binned_list.append(binned)
 
