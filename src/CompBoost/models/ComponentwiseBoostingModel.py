@@ -16,11 +16,8 @@ class ComponentwiseBoostingModel:
         n_bins: int = 256,
         spline_degree: int = 2,
         n_knots: int = 10,
-        loss: str = 'mse', # mse or flooding
-        flood_level: float = 0.0,
+        loss: str = 'mse',
         use_momentum: bool = False,
-        use_top_k: bool = False,
-        top_k: int = 5,
         momentum_decay: float = 0.9,
         momentum_strength: float = 1.0,
         random_state: Optional[int] = None,
@@ -52,12 +49,9 @@ class ComponentwiseBoostingModel:
         self.n_knots = n_knots
         
         self.loss = loss
-        self.flood_level = flood_level
         
         # Setup method hyperparameters
         self.use_momentum = use_momentum
-        self.use_top_k = use_top_k
-        self.top_k = top_k
         self.momentum_decay = momentum_decay
         self.momentum_strength = momentum_strength
         
@@ -88,11 +82,6 @@ class ComponentwiseBoostingModel:
     def _get_gradient(self, y_pred, y):
         # returns gradient of loss with respect to prediction
         grad = (y_pred - y)
-        if self.loss == 'flooding':
-            # invert gradient if loss falls below flood level to push it back up
-            mse = torch.mean((y_pred - y)**2)
-            if mse < self.flood_level:
-                grad *= -1.0 
         return grad
 
     def _select_feature(self, losses_tensor: torch.Tensor) -> int:
@@ -130,16 +119,7 @@ class ComponentwiseBoostingModel:
         else:
             adjusted_losses = losses_tensor
 
-        # Apply top-k logic
-        if self.use_top_k:
-            k = min(self.top_k, n_features)
-            top_k_indices = torch.topk(adjusted_losses, k, largest=False).indices
-            # calculate weights and select feature
-            weights = torch.arange(k, 0, -1, device=losses_tensor.device, dtype=torch.float32)
-            rank_idx = torch.multinomial(weights, 1).item()
-            selected_idx = top_k_indices[rank_idx].item()
-        else:
-            selected_idx = torch.argmin(adjusted_losses).item()
+        selected_idx = torch.argmin(adjusted_losses).item()
             
         return selected_idx
 
@@ -393,7 +373,6 @@ class ComponentwiseBoostingModel:
         # calculate preds and losses
         losses = ((preds - target_rep)**2).mean(dim=1)
         return beta.squeeze(-1), losses
-
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
         # Convert inputs to tensors
