@@ -23,7 +23,8 @@ class ComponentwiseBoostingModel:
         random_state: Optional[int] = None,
         eps_momentum: float = 1e-6,
         eps_linear: float = 1e-8,
-        target_df: float = 1.0 # target degrees of freedom for penalization
+        target_df: float = 1.0, # target degrees of freedom for penalization
+        device: str = "cpu"
     ):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -64,7 +65,8 @@ class ComponentwiseBoostingModel:
         self.eps_momentum = eps_momentum
         self.eps_linear = eps_linear   
         self.target_df = target_df
-        
+        self.device = device
+
         self.estimators_ = []
         self.intercept_ = 0.0
         self.feature_momentum = {} 
@@ -375,17 +377,16 @@ class ComponentwiseBoostingModel:
         return beta.squeeze(-1), losses
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
-        # Convert inputs to tensors
-        X_train = torch.as_tensor(X_train, dtype=torch.float32)
-        y_train = torch.as_tensor(y_train, dtype=torch.float32)
+        # Convert inputs to tensors and push to device
+        X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
+        y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
+        
         if X_val is not None:
-            # Convert validation inputs
-            X_val = torch.as_tensor(X_val, dtype=torch.float32)
-            y_val = torch.as_tensor(y_val, dtype=torch.float32)
+            X_val = torch.as_tensor(X_val, dtype=torch.float32, device=self.device)
+            y_val = torch.as_tensor(y_val, dtype=torch.float32, device=self.device)
         if X_test is not None:
-            # Convert test inputs
-            X_test = torch.as_tensor(X_test, dtype=torch.float32)
-            y_test = torch.as_tensor(y_test, dtype=torch.float32)
+            X_test = torch.as_tensor(X_test, dtype=torch.float32, device=self.device)
+            y_test = torch.as_tensor(y_test, dtype=torch.float32, device=self.device)
 
         # Store intercept as initial prediction
         self.intercept_ = torch.mean(y_train).item()
@@ -704,7 +705,7 @@ class ComponentwiseBoostingModel:
                 print(f"Iter {i+1}/{self.n_estimators} | Train MSE: {train_mse:.5f}")
 
     def predict(self, X, use_best_model=False):
-        X = torch.as_tensor(X, dtype=torch.float32)
+        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
 
         # initialize pred with intercept
         pred = torch.full((X.shape[0],), self.intercept_)

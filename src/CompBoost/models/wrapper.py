@@ -12,16 +12,38 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self,
         n_estimators=100,
         learning_rate=0.1,
-        base_learner="polynomial",
-        degree=3,
-        bin_edges=None,
+        base_learner="linear",
+        poly_degree=2,
+        tree_max_depth=1,
+        n_bins=256,
+        spline_degree=2,
+        n_knots=10,
+        loss='mse',
+        use_momentum=False,
+        momentum_decay=0.9,
+        momentum_strength=1.0,
+        random_state=None,
+        eps_momentum=1e-6,
+        eps_linear=1e-8,
+        target_df=1.0,
         device="cpu"
     ):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.base_learner = base_learner
-        self.degree = degree
-        self.bin_edges = bin_edges
+        self.poly_degree = poly_degree
+        self.tree_max_depth = tree_max_depth
+        self.n_bins = n_bins
+        self.spline_degree = spline_degree
+        self.n_knots = n_knots
+        self.loss = loss
+        self.use_momentum = use_momentum
+        self.momentum_decay = momentum_decay
+        self.momentum_strength = momentum_strength
+        self.random_state = random_state
+        self.eps_momentum = eps_momentum
+        self.eps_linear = eps_linear
+        self.target_df = target_df
         self.device = device
 
     def fit(self, X, y):
@@ -33,8 +55,19 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             n_estimators=self.n_estimators,
             learning_rate=self.learning_rate,
             base_learner=self.base_learner,
-            degree=self.degree,
-            bin_edges=self.bin_edges,
+            poly_degree=self.poly_degree,
+            tree_max_depth=self.tree_max_depth,
+            n_bins=self.n_bins,
+            spline_degree=self.spline_degree,
+            n_knots=self.n_knots,
+            loss=self.loss,
+            use_momentum=self.use_momentum,
+            momentum_decay=self.momentum_decay,
+            momentum_strength=self.momentum_strength,
+            random_state=self.random_state,
+            eps_momentum=self.eps_momentum,
+            eps_linear=self.eps_linear,
+            target_df=self.target_df,
             device=self.device
         )
 
