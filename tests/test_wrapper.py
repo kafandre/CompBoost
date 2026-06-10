@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV
-from CompBoost.models.wrapper import TorchCompBoostRegressor
+from compboost.models.wrapper import TorchCompBoostRegressor
 
 @pytest.fixture
 def numpy_data():

@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from CompBoost.models.ComponentwiseBoostingModel import ComponentwiseBoostingModel
+from compboost.models.ComponentwiseBoostingModel import ComponentwiseBoostingModel
 
 @pytest.fixture
 def synthetic_data():
