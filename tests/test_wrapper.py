@@ -50,3 +50,28 @@ def test_grid_search_integration(numpy_data):
     
     assert grid.best_params_['n_estimators'] in [5, 10]
     assert isinstance(grid.predict(X), np.ndarray)
+
+def test_wrapper_device_and_serialization(numpy_data, tmp_path):
+    """Verifies that the scikit-learn wrapper supports device migration and serialization/deserialization."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner=["linear", "tree"])
+    reg.fit(X, y)
+    
+    # Move to CPU
+    reg.to("cpu")
+    assert reg.device == "cpu"
+    assert reg.model_.device == "cpu"
+    
+    # Save
+    file_path = tmp_path / "wrapper_model.pt"
+    reg.save_model(file_path)
+    
+    # Load
+    loaded_reg = TorchCompBoostRegressor.load_model(file_path, map_location="cpu")
+    assert loaded_reg.device == "cpu"
+    assert loaded_reg.model_.device == "cpu"
+    
+    # Predict and verify identical output
+    preds_orig = reg.predict(X)
+    preds_loaded = loaded_reg.predict(X)
+    assert np.allclose(preds_orig, preds_loaded)

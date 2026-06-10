@@ -123,3 +123,38 @@ def test_save_and_load_model(synthetic_data, tmp_path):
     preds_loaded = loaded_model.predict(X)
     
     assert torch.allclose(preds_orig, preds_loaded)
+
+def test_device_migration_and_serialization(synthetic_data, tmp_path):
+    """Verifies that the model can migrate device affinity and serialize/deserialize across devices."""
+    X, y = synthetic_data
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner=["linear", "polynomial"], target_df=1.0)
+    model.fit(X, y)
+    
+    # Move model to CPU
+    model.to("cpu")
+    assert model.device == "cpu"
+    
+    # Verify internal tensors are on CPU
+    if model.all_bin_edges is not None:
+        assert model.all_bin_edges.device.type == "cpu"
+    for est in model.estimators_:
+        params = est['params']
+        if isinstance(params, torch.Tensor):
+            assert params.device.type == "cpu"
+        elif isinstance(params, dict):
+            for v in params.values():
+                if isinstance(v, torch.Tensor):
+                    assert v.device.type == "cpu"
+
+    # Save using PyTorch serializer
+    file_path = tmp_path / "test_device_model.pt"
+    model.save_model(file_path)
+    
+    # Load using PyTorch deserializer explicitly mapping to 'cpu'
+    loaded_model = ComponentwiseBoostingModel.load_model(file_path, map_location="cpu")
+    assert loaded_model.device == "cpu"
+    
+    # Ensure predictions are identical
+    preds_orig = model.predict(X)
+    preds_loaded = loaded_model.predict(X)
+    assert torch.allclose(preds_orig, preds_loaded)
