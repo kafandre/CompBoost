@@ -75,3 +75,27 @@ def test_wrapper_device_and_serialization(numpy_data, tmp_path):
     preds_orig = reg.predict(X)
     preds_loaded = loaded_reg.predict(X)
     assert np.allclose(preds_orig, preds_loaded)
+
+def test_wrapper_api_compatibility(numpy_data, capsys):
+    """Verifies loss parameter validation, validation set fitting, and verbose printing."""
+    X, y = numpy_data
+    X_tr, y_tr = X[:40], y[:40]
+    X_va, y_va = X[40:], y[40:]
+    
+    # 1. Test loss validation (must raise ValueError if not mse)
+    with pytest.raises(ValueError, match="loss must be 'mse'"):
+        TorchCompBoostRegressor(loss="absolute_error")
+        
+    # 2. Test fit with validation data
+    reg = TorchCompBoostRegressor(n_estimators=12, verbose=5)
+    reg.fit(X_tr, y_tr, X_val=X_va, y_val=y_va)
+    
+    # Ensure validation history is populated
+    assert len(reg.model_.history['val_loss']) == 12
+    assert reg.model_.best_iteration_ > 0
+    
+    # 3. Test verbose parameter and output capture
+    captured = capsys.readouterr()
+    assert "Iter 5/" in captured.out
+    assert "Iter 10/" in captured.out
+    assert "Iter 12/" not in captured.out

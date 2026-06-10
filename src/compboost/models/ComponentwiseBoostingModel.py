@@ -24,8 +24,11 @@ class ComponentwiseBoostingModel:
         eps_momentum: float = 1e-6,
         eps_linear: float = 1e-8,
         target_df: float = 1.0, # target degrees of freedom for penalization
-        device: str = "cpu"
+        device: str = "cpu",
+        verbose: int = 10
     ):
+        if loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         
@@ -66,6 +69,7 @@ class ComponentwiseBoostingModel:
         self.eps_linear = eps_linear   
         self.target_df = target_df
         self.device = device
+        self.verbose = verbose
 
         self.estimators_ = []
         self.intercept_ = 0.0
@@ -715,7 +719,7 @@ class ComponentwiseBoostingModel:
             train_mse = torch.mean((curr_pred_train - y_train)**2).item()
             self.history['train_loss'].append(train_mse)
 
-            if (i+1) % 50 == 0:
+            if self.verbose > 0 and (i+1) % self.verbose == 0:
                 print(f"Iter {i+1}/{self.n_estimators} | Train MSE: {train_mse:.5f}")
 
     def predict(self, X, use_best_model=False):

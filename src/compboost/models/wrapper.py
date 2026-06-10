@@ -69,8 +69,11 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         eps_momentum=1e-6,
         eps_linear=1e-8,
         target_df=1.0,
-        device="cpu"
+        device="cpu",
+        verbose=10
     ):
+        if loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.base_learner = base_learner
@@ -88,10 +91,13 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.eps_linear = eps_linear
         self.target_df = target_df
         self.device = device
+        self.verbose = verbose
 
-    def fit(self, X, y):
+    def fit(self, X, y, X_val=None, y_val=None):
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
+        if X_val is not None and y_val is not None:
+            X_val, y_val = check_X_y(X_val, y_val, y_numeric=True)
 
         # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(
@@ -111,11 +117,12 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             eps_momentum=self.eps_momentum,
             eps_linear=self.eps_linear,
             target_df=self.target_df,
-            device=self.device
+            device=self.device,
+            verbose=self.verbose
         )
 
         # 3. Fit the model
-        self.model_.fit(X, y)
+        self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
         # 4. Mark as fitted for scikit-learn
         self.is_fitted_ = True
