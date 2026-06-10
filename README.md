@@ -46,7 +46,7 @@ pip install compboost
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-from CompBoost import TorchCompBoostRegressor
+from compboost import TorchCompBoostRegressor
 
 # Generate some non-linear data
 np.random.seed(42)

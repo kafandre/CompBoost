@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV
-from CompBoost.models.wrapper import TorchCompBoostRegressor
+from compboost.models.wrapper import TorchCompBoostRegressor
 
 @pytest.fixture
 def numpy_data():
@@ -50,3 +50,52 @@ def test_grid_search_integration(numpy_data):
     
     assert grid.best_params_['n_estimators'] in [5, 10]
     assert isinstance(grid.predict(X), np.ndarray)
+
+def test_wrapper_device_and_serialization(numpy_data, tmp_path):
+    """Verifies that the scikit-learn wrapper supports device migration and serialization/deserialization."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner=["linear", "tree"])
+    reg.fit(X, y)
+    
+    # Move to CPU
+    reg.to("cpu")
+    assert reg.device == "cpu"
+    assert reg.model_.device == "cpu"
+    
+    # Save
+    file_path = tmp_path / "wrapper_model.pt"
+    reg.save_model(file_path)
+    
+    # Load
+    loaded_reg = TorchCompBoostRegressor.load_model(file_path, map_location="cpu")
+    assert loaded_reg.device == "cpu"
+    assert loaded_reg.model_.device == "cpu"
+    
+    # Predict and verify identical output
+    preds_orig = reg.predict(X)
+    preds_loaded = loaded_reg.predict(X)
+    assert np.allclose(preds_orig, preds_loaded)
+
+def test_wrapper_api_compatibility(numpy_data, capsys):
+    """Verifies loss parameter validation, validation set fitting, and verbose printing."""
+    X, y = numpy_data
+    X_tr, y_tr = X[:40], y[:40]
+    X_va, y_va = X[40:], y[40:]
+    
+    # 1. Test loss validation (must raise ValueError if not mse)
+    with pytest.raises(ValueError, match="loss must be 'mse'"):
+        TorchCompBoostRegressor(loss="absolute_error")
+        
+    # 2. Test fit with validation data
+    reg = TorchCompBoostRegressor(n_estimators=12, verbose=5)
+    reg.fit(X_tr, y_tr, X_val=X_va, y_val=y_va)
+    
+    # Ensure validation history is populated
+    assert len(reg.model_.history['val_loss']) == 12
+    assert reg.model_.best_iteration_ > 0
+    
+    # 3. Test verbose parameter and output capture
+    captured = capsys.readouterr()
+    assert "Iter 5/" in captured.out
+    assert "Iter 10/" in captured.out
+    assert "Iter 12/" not in captured.out

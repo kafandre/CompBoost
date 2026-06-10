@@ -24,8 +24,11 @@ class ComponentwiseBoostingModel:
         eps_momentum: float = 1e-6,
         eps_linear: float = 1e-8,
         target_df: float = 1.0, # target degrees of freedom for penalization
-        device: str = "cpu"
+        device: str = "cpu",
+        verbose: int = 10
     ):
+        if loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         
@@ -66,6 +69,7 @@ class ComponentwiseBoostingModel:
         self.eps_linear = eps_linear   
         self.target_df = target_df
         self.device = device
+        self.verbose = verbose
 
         self.estimators_ = []
         self.intercept_ = 0.0
@@ -578,8 +582,9 @@ class ComponentwiseBoostingModel:
                     best_bin_idx = torch.argmax(feat_gains).item()
                     f_binned = X_train_binned[:, best_idx]
                     mask_left = f_binned <= best_bin_idx
-                    val_left = target[mask_left].mean().item()
-                    val_right = target[~mask_left].mean().item()
+                    val_left = target[mask_left].mean().item() if mask_left.any() else 0.0
+                    val_right = target[~mask_left].mean().item() if (~mask_left).any() else 0.0
+
                     best_params = {
                         'threshold': self.all_bin_edges[best_idx, best_bin_idx + 1].item(),
                         'left_val': val_left, 'right_val': val_right
@@ -714,7 +719,7 @@ class ComponentwiseBoostingModel:
             train_mse = torch.mean((curr_pred_train - y_train)**2).item()
             self.history['train_loss'].append(train_mse)
 
-            if (i+1) % 50 == 0:
+            if self.verbose > 0 and (i+1) % self.verbose == 0:
                 print(f"Iter {i+1}/{self.n_estimators} | Train MSE: {train_mse:.5f}")
 
     def predict(self, X, use_best_model=False):
@@ -809,15 +814,55 @@ class ComponentwiseBoostingModel:
             
         return pred
 
+    def to(self, device):
+        """Moves all model parameters and assets to the specified PyTorch device."""
+        self.device = str(device)
+        
+        if isinstance(self.intercept_, torch.Tensor):
+            self.intercept_ = self.intercept_.to(device)
+            
+        if hasattr(self, 'all_bin_edges') and self.all_bin_edges is not None:
+            self.all_bin_edges = self.all_bin_edges.to(device)
+            
+        if hasattr(self, 'competing_assets_') and self.competing_assets_:
+            for l_type, assets in self.competing_assets_.items():
+                for key, val in assets.items():
+                    if isinstance(val, torch.Tensor):
+                        assets[key] = val.to(device)
+                        
+        if hasattr(self, 'A_bspline_legacy') and self.A_bspline_legacy is not None:
+            self.A_bspline_legacy = self.A_bspline_legacy.to(device)
+            
+        for est in self.estimators_:
+            params = est['params']
+            if isinstance(params, torch.Tensor):
+                est['params'] = params.to(device)
+            elif isinstance(params, dict):
+                for k, v in params.items():
+                    if isinstance(v, torch.Tensor):
+                        params[k] = v.to(device)
+                        
+        if hasattr(self, 'feature_momentum') and self.feature_momentum:
+            for k, v in self.feature_momentum.items():
+                if isinstance(v, torch.Tensor):
+                    self.feature_momentum[k] = v.to(device)
+                    
+        return self
+
     @staticmethod
-    def load_model(path):
-        import pickle
-        with open(path, 'rb') as f:
-            return pickle.load(f)
+    def load_model(path, map_location=None):
+        import torch
+        if map_location is None:
+            if not torch.cuda.is_available() and not (hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()):
+                map_location = 'cpu'
+        
+        model = torch.load(path, map_location=map_location, weights_only=False)
+        if map_location is not None:
+            model.to(map_location)
+        return model
 
     def save_model(self, path):
-        import pickle
+        import torch
         import os
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            pickle.dump(self, f)
+        torch.save(self, path)

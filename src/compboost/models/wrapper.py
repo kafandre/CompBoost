@@ -69,8 +69,11 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         eps_momentum=1e-6,
         eps_linear=1e-8,
         target_df=1.0,
-        device="cpu"
+        device="cpu",
+        verbose=10
     ):
+        if loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.base_learner = base_learner
@@ -88,10 +91,13 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.eps_linear = eps_linear
         self.target_df = target_df
         self.device = device
+        self.verbose = verbose
 
-    def fit(self, X, y):
+    def fit(self, X, y, X_val=None, y_val=None):
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
+        if X_val is not None and y_val is not None:
+            X_val, y_val = check_X_y(X_val, y_val, y_numeric=True)
 
         # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(
@@ -111,11 +117,12 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             eps_momentum=self.eps_momentum,
             eps_linear=self.eps_linear,
             target_df=self.target_df,
-            device=self.device
+            device=self.device,
+            verbose=self.verbose
         )
 
         # 3. Fit the model
-        self.model_.fit(X, y)
+        self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
         # 4. Mark as fitted for scikit-learn
         self.is_fitted_ = True
@@ -133,3 +140,31 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         if isinstance(preds, torch.Tensor):
             return preds.detach().cpu().numpy()
         return np.array(preds)
+
+    def to(self, device):
+        """Moves the regressor's PyTorch engine and its parameters to the specified device."""
+        self.device = str(device)
+        if hasattr(self, 'model_'):
+            self.model_.to(device)
+        return self
+
+    def save_model(self, path):
+        """Saves the fitted regressor to disk using torch.save."""
+        check_is_fitted(self, 'is_fitted_')
+        import torch
+        import os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self, path)
+
+    @staticmethod
+    def load_model(path, map_location=None):
+        """Loads a saved regressor from disk, mapping tensors to the specified device."""
+        import torch
+        if map_location is None:
+            if not torch.cuda.is_available() and not (hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()):
+                map_location = 'cpu'
+        
+        reg = torch.load(path, map_location=map_location, weights_only=False)
+        if map_location is not None:
+            reg.to(map_location)
+        return reg
