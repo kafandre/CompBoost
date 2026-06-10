@@ -810,15 +810,55 @@ class ComponentwiseBoostingModel:
             
         return pred
 
+    def to(self, device):
+        """Moves all model parameters and assets to the specified PyTorch device."""
+        self.device = str(device)
+        
+        if isinstance(self.intercept_, torch.Tensor):
+            self.intercept_ = self.intercept_.to(device)
+            
+        if hasattr(self, 'all_bin_edges') and self.all_bin_edges is not None:
+            self.all_bin_edges = self.all_bin_edges.to(device)
+            
+        if hasattr(self, 'competing_assets_') and self.competing_assets_:
+            for l_type, assets in self.competing_assets_.items():
+                for key, val in assets.items():
+                    if isinstance(val, torch.Tensor):
+                        assets[key] = val.to(device)
+                        
+        if hasattr(self, 'A_bspline_legacy') and self.A_bspline_legacy is not None:
+            self.A_bspline_legacy = self.A_bspline_legacy.to(device)
+            
+        for est in self.estimators_:
+            params = est['params']
+            if isinstance(params, torch.Tensor):
+                est['params'] = params.to(device)
+            elif isinstance(params, dict):
+                for k, v in params.items():
+                    if isinstance(v, torch.Tensor):
+                        params[k] = v.to(device)
+                        
+        if hasattr(self, 'feature_momentum') and self.feature_momentum:
+            for k, v in self.feature_momentum.items():
+                if isinstance(v, torch.Tensor):
+                    self.feature_momentum[k] = v.to(device)
+                    
+        return self
+
     @staticmethod
-    def load_model(path):
-        import pickle
-        with open(path, 'rb') as f:
-            return pickle.load(f)
+    def load_model(path, map_location=None):
+        import torch
+        if map_location is None:
+            if not torch.cuda.is_available() and not (hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()):
+                map_location = 'cpu'
+        
+        model = torch.load(path, map_location=map_location, weights_only=False)
+        if map_location is not None:
+            model.to(map_location)
+        return model
 
     def save_model(self, path):
-        import pickle
+        import torch
         import os
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            pickle.dump(self, f)
+        torch.save(self, path)

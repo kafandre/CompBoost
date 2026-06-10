@@ -133,3 +133,31 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         if isinstance(preds, torch.Tensor):
             return preds.detach().cpu().numpy()
         return np.array(preds)
+
+    def to(self, device):
+        """Moves the regressor's PyTorch engine and its parameters to the specified device."""
+        self.device = str(device)
+        if hasattr(self, 'model_'):
+            self.model_.to(device)
+        return self
+
+    def save_model(self, path):
+        """Saves the fitted regressor to disk using torch.save."""
+        check_is_fitted(self, 'is_fitted_')
+        import torch
+        import os
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        torch.save(self, path)
+
+    @staticmethod
+    def load_model(path, map_location=None):
+        """Loads a saved regressor from disk, mapping tensors to the specified device."""
+        import torch
+        if map_location is None:
+            if not torch.cuda.is_available() and not (hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()):
+                map_location = 'cpu'
+        
+        reg = torch.load(path, map_location=map_location, weights_only=False)
+        if map_location is not None:
+            reg.to(map_location)
+        return reg
