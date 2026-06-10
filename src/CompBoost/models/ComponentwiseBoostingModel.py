@@ -381,12 +381,25 @@ class ComponentwiseBoostingModel:
         X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
         y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
         
+        # Input validation
+        if torch.isnan(X_train).any() or torch.isinf(X_train).any():
+            raise ValueError("Input X_train contains NaN or Infinity. Please clean your data.")
+        if torch.isnan(y_train).any() or torch.isinf(y_train).any():
+            raise ValueError("Target y_train contains NaN or Infinity. Please clean your data.")
+
         if X_val is not None:
             X_val = torch.as_tensor(X_val, dtype=torch.float32, device=self.device)
             y_val = torch.as_tensor(y_val, dtype=torch.float32, device=self.device)
+            # Input validation
+            if torch.isnan(X_val).any() or torch.isinf(X_val).any():
+                raise ValueError("Validation set X_val or y_val contains NaN or Infinity.")
+
         if X_test is not None:
             X_test = torch.as_tensor(X_test, dtype=torch.float32, device=self.device)
             y_test = torch.as_tensor(y_test, dtype=torch.float32, device=self.device)
+            # Input validation
+            if torch.isnan(X_test).any() or torch.isinf(X_test).any():
+                raise ValueError("Test set X_test or y_test contains NaN or Infinity.")
 
         # Store intercept as initial prediction
         self.intercept_ = torch.mean(y_train).item()
@@ -707,8 +720,12 @@ class ComponentwiseBoostingModel:
     def predict(self, X, use_best_model=False):
         X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
 
+        # Input validation
+        if torch.isnan(X).any() or torch.isinf(X).any():
+            raise ValueError("Input X contains NaN or Infinity during prediction.")
+
         # initialize pred with intercept
-        pred = torch.full((X.shape[0],), self.intercept_)
+        pred = torch.full((X.shape[0],), self.intercept_, device=self.device)
         
         limit = self.best_iteration_ if use_best_model and self.best_iteration_ > 0 else len(self.estimators_)
 

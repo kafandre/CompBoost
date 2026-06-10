@@ -7,6 +7,49 @@ from .ComponentwiseBoostingModel import ComponentwiseBoostingModel
 class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
     """
     Scikit-Learn compatible wrapper for the PyTorch Component-wise Boosting Model.
+
+    This regressor implements component-wise gradient boosting using tensor-vectorized
+    PyTorch operations. It supports competing base learners and a novel momentum-based 
+    feature selection regularizer.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        The number of boosting iterations to perform.
+    learning_rate : float, default=0.1
+        Shrinks the contribution of each base learner by this value.
+    base_learner : str or list of str, default="linear"
+        The type of base learner(s) to use. Options are "linear", "polynomial", 
+        "tree", and "bspline". If a list is provided (e.g., ["linear", "bspline"]), 
+        the model operates in competing mode, selecting the best learner per iteration.
+    poly_degree : int, default=2
+        The degree of the polynomial if "polynomial" is in `base_learner`.
+    tree_max_depth : int, default=1
+        Maximum depth of the decision tree (currently acts as decision stumps).
+    n_bins : int, default=256
+        Number of bins used for histogram-based tree splitting.
+    spline_degree : int, default=2
+        Degree of the B-splines if "bspline" is in `base_learner`.
+    n_knots : int, default=10
+        Number of interior knots for B-splines.
+    loss : str, default='mse'
+        The loss function to optimize. Currently supports Mean Squared Error ('mse').
+    use_momentum : bool, default=False
+        Whether to use momentum-based feature selection to regularize the boosting path.
+    momentum_decay : float, default=0.9
+        Decay factor for the momentum tracker (requires `use_momentum=True`).
+    momentum_strength : float, default=1.0
+        Multiplier for the momentum penalty (requires `use_momentum=True`).
+    random_state : int or None, default=None
+        Seed for the random number generator for reproducible results.
+    eps_momentum : float, default=1e-6
+        Small constant added for numerical stability in momentum calculations.
+    eps_linear : float, default=1e-8
+        Small constant added to the diagonal of matrices for Ridge-like stabilization.
+    target_df : float, default=1.0
+        Target degrees of freedom used for penalization of complex base learners.
+    device : str, default="cpu"
+        The PyTorch device to run calculations on (e.g., "cpu", "cuda", "mps").
     """
     def __init__(
         self,
