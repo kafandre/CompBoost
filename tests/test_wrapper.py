@@ -94,9 +94,10 @@ def test_wrapper_api_compatibility(numpy_data, capsys):
     X_tr, y_tr = X[:40], y[:40]
     X_va, y_va = X[40:], y[40:]
     
-    # 1. Test loss validation (must raise ValueError if not mse)
+    # 1. Test loss validation (must raise ValueError if not mse on fit)
+    reg_invalid = TorchCompBoostRegressor(loss="absolute_error")
     with pytest.raises(ValueError, match="loss must be 'mse'"):
-        TorchCompBoostRegressor(loss="absolute_error")
+        reg_invalid.fit(X_tr, y_tr)
         
     # 2. Test fit with validation data
     reg = TorchCompBoostRegressor(n_estimators=12, verbose=5)
@@ -111,3 +112,38 @@ def test_wrapper_api_compatibility(numpy_data, capsys):
     assert "Iter 5/" in captured.out
     assert "Iter 10/" in captured.out
     assert "Iter 12/" not in captured.out
+
+def test_feature_importances(numpy_data):
+    """Verifies that feature_importances_ and n_features_in_ are correctly exposed and sum to 1.0."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=10, base_learner="linear")
+    reg.fit(X, y)
+    
+    assert hasattr(reg, 'n_features_in_')
+    assert reg.n_features_in_ == X.shape[1]
+    
+    assert hasattr(reg, 'feature_importances_')
+    assert isinstance(reg.feature_importances_, np.ndarray)
+    assert reg.feature_importances_.shape == (X.shape[1],)
+    
+    # Feature importances should sum to 1.0 since n_estimators > 0
+    assert np.allclose(np.sum(reg.feature_importances_), 1.0)
+
+def test_wrapper_predict_use_best_model(numpy_data):
+    """Verifies that the wrapper's predict method supports use_best_model=True."""
+    X, y = numpy_data
+    X_tr, y_tr = X[:40], y[:40]
+    X_va, y_va = X[40:], y[40:]
+    
+    reg = TorchCompBoostRegressor(n_estimators=30, base_learner="tree", learning_rate=0.5)
+    reg.fit(X_tr, y_tr, X_val=X_va, y_val=y_va)
+    
+    preds_full = reg.predict(X_va, use_best_model=False)
+    preds_best = reg.predict(X_va, use_best_model=True)
+    
+    assert isinstance(preds_full, np.ndarray)
+    assert isinstance(preds_best, np.ndarray)
+    assert preds_full.shape == preds_best.shape
+    
+    if reg.model_.best_iteration_ < reg.n_estimators:
+        assert not np.allclose(preds_full, preds_best)

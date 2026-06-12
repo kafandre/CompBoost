@@ -72,8 +72,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         device="cpu",
         verbose=10
     ):
-        if loss != 'mse':
-            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.base_learner = base_learner
@@ -94,6 +92,8 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.verbose = verbose
 
     def fit(self, X, y, X_val=None, y_val=None):
+        if self.loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {self.loss}")
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
         if X_val is not None and y_val is not None:
@@ -124,17 +124,28 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         # 3. Fit the model
         self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
-        # 4. Mark as fitted for scikit-learn
+        # 4. Calculate feature importances and features in
+        self.n_features_in_ = X.shape[1]
+        importances = np.zeros(self.n_features_in_)
+        selected = self.model_.history['selected_features']
+        for idx in selected:
+            importances[idx] += 1
+        if len(selected) > 0:
+            self.feature_importances_ = importances / len(selected)
+        else:
+            self.feature_importances_ = importances
+        
+        # 5. Mark as fitted for scikit-learn
         self.is_fitted_ = True
         return self
 
-    def predict(self, X):
+    def predict(self, X, use_best_model=False):
         # 1. Scikit-learn validation
         check_is_fitted(self, 'is_fitted_')
         X = check_array(X)
 
         # 2. Predict using PyTorch engine
-        preds = self.model_.predict(X)
+        preds = self.model_.predict(X, use_best_model=use_best_model)
 
         # 3. Ensure output is a standard numpy array
         if isinstance(preds, torch.Tensor):

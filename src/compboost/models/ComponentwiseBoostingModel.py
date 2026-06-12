@@ -61,9 +61,6 @@ class ComponentwiseBoostingModel:
         
         # Save random state for reproducibility
         self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(random_state)
-            np.random.seed(random_state)
 
         self.eps_momentum = eps_momentum
         self.eps_linear = eps_linear   
