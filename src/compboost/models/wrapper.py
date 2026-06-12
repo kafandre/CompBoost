@@ -139,13 +139,13 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.is_fitted_ = True
         return self
 
-    def predict(self, X):
+    def predict(self, X, use_best_model=False):
         # 1. Scikit-learn validation
         check_is_fitted(self, 'is_fitted_')
         X = check_array(X)
 
         # 2. Predict using PyTorch engine
-        preds = self.model_.predict(X)
+        preds = self.model_.predict(X, use_best_model=use_best_model)
 
         # 3. Ensure output is a standard numpy array
         if isinstance(preds, torch.Tensor):

@@ -127,3 +127,22 @@ def test_feature_importances(numpy_data):
     
     # Feature importances should sum to 1.0 since n_estimators > 0
     assert np.allclose(np.sum(reg.feature_importances_), 1.0)
+
+def test_wrapper_predict_use_best_model(numpy_data):
+    """Verifies that the wrapper's predict method supports use_best_model=True."""
+    X, y = numpy_data
+    X_tr, y_tr = X[:40], y[:40]
+    X_va, y_va = X[40:], y[40:]
+    
+    reg = TorchCompBoostRegressor(n_estimators=30, base_learner="tree", learning_rate=0.5)
+    reg.fit(X_tr, y_tr, X_val=X_va, y_val=y_va)
+    
+    preds_full = reg.predict(X_va, use_best_model=False)
+    preds_best = reg.predict(X_va, use_best_model=True)
+    
+    assert isinstance(preds_full, np.ndarray)
+    assert isinstance(preds_best, np.ndarray)
+    assert preds_full.shape == preds_best.shape
+    
+    if reg.model_.best_iteration_ < reg.n_estimators:
+        assert not np.allclose(preds_full, preds_best)
