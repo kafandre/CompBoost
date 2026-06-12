@@ -24,6 +24,18 @@ def test_wrapper_numpy_io(numpy_data):
     assert preds.ndim == 1
     assert preds.shape[0] == X.shape[0]
 
+def test_wrapper_2d_target_handling(numpy_data):
+    """Ensures the wrapper handles 2D column vector targets successfully."""
+    X, y = numpy_data
+    y_2d = y.reshape(-1, 1)
+    
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
+    reg.fit(X, y_2d)
+    preds = reg.predict(X)
+    assert isinstance(preds, np.ndarray)
+    assert preds.ndim == 1
+    assert preds.shape[0] == X.shape[0]
+
 def test_scikit_learn_clone_compatibility():
     """Validates that clone() copies structural hyperparameters cleanly."""
     reg = TorchCompBoostRegressor(n_estimators=45, learning_rate=0.05, poly_degree=4)

@@ -385,6 +385,11 @@ class ComponentwiseBoostingModel:
         X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
         y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
         
+        # Target shape validation and flattening
+        if y_train.ndim > 2 or (y_train.ndim == 2 and y_train.shape[1] > 1):
+            raise ValueError("Multi-output targets are not supported. Target y must be 1D or shape (n_samples, 1).")
+        y_train = y_train.flatten()
+        
         # Input validation
         if torch.isnan(X_train).any() or torch.isinf(X_train).any():
             raise ValueError("Input X_train contains NaN or Infinity. Please clean your data.")
@@ -394,6 +399,9 @@ class ComponentwiseBoostingModel:
         if X_val is not None:
             X_val = torch.as_tensor(X_val, dtype=torch.float32, device=self.device)
             y_val = torch.as_tensor(y_val, dtype=torch.float32, device=self.device)
+            if y_val.ndim > 2 or (y_val.ndim == 2 and y_val.shape[1] > 1):
+                raise ValueError("Multi-output targets are not supported. Target y_val must be 1D or shape (n_samples, 1).")
+            y_val = y_val.flatten()
             # Input validation
             if torch.isnan(X_val).any() or torch.isinf(X_val).any():
                 raise ValueError("Validation set X_val or y_val contains NaN or Infinity.")
@@ -401,6 +409,9 @@ class ComponentwiseBoostingModel:
         if X_test is not None:
             X_test = torch.as_tensor(X_test, dtype=torch.float32, device=self.device)
             y_test = torch.as_tensor(y_test, dtype=torch.float32, device=self.device)
+            if y_test.ndim > 2 or (y_test.ndim == 2 and y_test.shape[1] > 1):
+                raise ValueError("Multi-output targets are not supported. Target y_test must be 1D or shape (n_samples, 1).")
+            y_test = y_test.flatten()
             # Input validation
             if torch.isnan(X_test).any() or torch.isinf(X_test).any():
                 raise ValueError("Test set X_test or y_test contains NaN or Infinity.")

@@ -22,6 +22,23 @@ def test_model_initialization():
     assert model_competing.legacy_mode is False
     assert model_competing.base_learner == "competing"
 
+def test_2d_target_handling(synthetic_data):
+    """Verifies that the model can handle 2D column-vector targets and raises ValueError for multi-output."""
+    X, y = synthetic_data
+    # 2D column vector target: shape (N, 1)
+    y_2d = y.reshape(-1, 1)
+    
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner="linear")
+    # This should not crash and should work successfully
+    model.fit(X, y_2d)
+    preds = model.predict(X)
+    assert preds.shape == (X.shape[0],)
+    
+    # 2D target with multiple columns should raise ValueError
+    y_multi = np.column_stack([y, y])
+    with pytest.raises(ValueError, match="Multi-output targets are not supported"):
+        model.fit(X, y_multi)
+
 @pytest.mark.parametrize("base_learner", ["linear", "polynomial", "tree", "bspline", ["linear", "tree"]])
 def test_base_learners_execution(synthetic_data, base_learner):
     """Ensures all single and competing base learners fit and predict without crashing."""
