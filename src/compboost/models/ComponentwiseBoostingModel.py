@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from typing import Optional, Union, Tuple, List, Dict
-from sklearn.tree import DecisionTreeRegressor
 from scipy.interpolate import BSpline
 from scipy.optimize import minimize_scalar
 
@@ -12,7 +11,6 @@ class ComponentwiseBoostingModel:
         learning_rate: float = 0.1,
         base_learner: Union[str, List[str]] = "linear",
         poly_degree: int = 2,
-        tree_max_depth: int = 1,
         n_bins: int = 256,
         spline_degree: int = 2,
         n_knots: int = 10,
@@ -47,7 +45,6 @@ class ComponentwiseBoostingModel:
         
         # Setup base learner parameters
         self.poly_degree = poly_degree
-        self.tree_max_depth = tree_max_depth
         self.n_bins = n_bins
         self.spline_degree = spline_degree
         self.n_knots = n_knots
@@ -104,7 +101,7 @@ class ComponentwiseBoostingModel:
             # calculate gain relative to worst loss
             gains = worst_loss - losses_tensor
             max_gain = torch.max(gains)
-            scores = gains / (max_gain + 1e-8)
+            scores = gains / (max_gain + self.eps_momentum)
             # add normalized score to momentum vector
             mom_vec += scores
             
@@ -114,7 +111,7 @@ class ComponentwiseBoostingModel:
                 
             loss_std = torch.std(losses_tensor).detach()
             # compute scale factor for adjustment
-            scale_factor = loss_std if loss_std > 1e-9 else 1.0
+            scale_factor = loss_std if loss_std > self.eps_momentum else 1.0
             adjustment = mom_vec * self.momentum_strength * scale_factor
 
             # Adjust losses

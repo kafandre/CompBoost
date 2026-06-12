@@ -20,7 +20,6 @@ def test_wrapper_numpy_io(numpy_data):
     preds = reg.predict(X)
     
     assert isinstance(preds, np.ndarray)
-    assert not isinstance(preds, type(X)) == False # Check strict numpy array type
     assert preds.ndim == 1
     assert preds.shape[0] == X.shape[0]
 

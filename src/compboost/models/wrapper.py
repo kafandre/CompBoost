@@ -57,7 +57,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         learning_rate=0.1,
         base_learner="linear",
         poly_degree=2,
-        tree_max_depth=1,
         n_bins=256,
         spline_degree=2,
         n_knots=10,
@@ -76,7 +75,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.learning_rate = learning_rate
         self.base_learner = base_learner
         self.poly_degree = poly_degree
-        self.tree_max_depth = tree_max_depth
         self.n_bins = n_bins
         self.spline_degree = spline_degree
         self.n_knots = n_knots
@@ -105,7 +103,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             learning_rate=self.learning_rate,
             base_learner=self.base_learner,
             poly_degree=self.poly_degree,
-            tree_max_depth=self.tree_max_depth,
             n_bins=self.n_bins,
             spline_degree=self.spline_degree,
             n_knots=self.n_knots,
