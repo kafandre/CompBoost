@@ -94,9 +94,10 @@ def test_wrapper_api_compatibility(numpy_data, capsys):
     X_tr, y_tr = X[:40], y[:40]
     X_va, y_va = X[40:], y[40:]
     
-    # 1. Test loss validation (must raise ValueError if not mse)
+    # 1. Test loss validation (must raise ValueError if not mse on fit)
+    reg_invalid = TorchCompBoostRegressor(loss="absolute_error")
     with pytest.raises(ValueError, match="loss must be 'mse'"):
-        TorchCompBoostRegressor(loss="absolute_error")
+        reg_invalid.fit(X_tr, y_tr)
         
     # 2. Test fit with validation data
     reg = TorchCompBoostRegressor(n_estimators=12, verbose=5)

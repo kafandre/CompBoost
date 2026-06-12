@@ -72,8 +72,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         device="cpu",
         verbose=10
     ):
-        if loss != 'mse':
-            raise ValueError(f"loss must be 'mse'. Got: {loss}")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.base_learner = base_learner
@@ -94,6 +92,8 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.verbose = verbose
 
     def fit(self, X, y, X_val=None, y_val=None):
+        if self.loss != 'mse':
+            raise ValueError(f"loss must be 'mse'. Got: {self.loss}")
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
         if X_val is not None and y_val is not None:
