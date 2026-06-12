@@ -528,13 +528,13 @@ class ComponentwiseBoostingModel:
                     # Recompute leaf values using optimal bin index
                     f_binned = X_train_binned[:, best_idx]
                     mask_left = f_binned <= best_bin_idx
-                    val_left = target[mask_left].mean()
-                    val_right = target[~mask_left].mean()
+                    val_left = target[mask_left].mean().item() if mask_left.any() else 0.0
+                    val_right = target[~mask_left].mean().item() if (~mask_left).any() else 0.0
                     
                     best_params = {
                         'threshold': self.all_bin_edges[best_idx, best_bin_idx + 1].item(),
-                        'left_val': val_left.item(),
-                        'right_val': val_right.item()
+                        'left_val': val_left,
+                        'right_val': val_right
                     }
 
             # Competing base learner mode
