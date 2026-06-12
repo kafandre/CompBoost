@@ -111,3 +111,19 @@ def test_wrapper_api_compatibility(numpy_data, capsys):
     assert "Iter 5/" in captured.out
     assert "Iter 10/" in captured.out
     assert "Iter 12/" not in captured.out
+
+def test_feature_importances(numpy_data):
+    """Verifies that feature_importances_ and n_features_in_ are correctly exposed and sum to 1.0."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=10, base_learner="linear")
+    reg.fit(X, y)
+    
+    assert hasattr(reg, 'n_features_in_')
+    assert reg.n_features_in_ == X.shape[1]
+    
+    assert hasattr(reg, 'feature_importances_')
+    assert isinstance(reg.feature_importances_, np.ndarray)
+    assert reg.feature_importances_.shape == (X.shape[1],)
+    
+    # Feature importances should sum to 1.0 since n_estimators > 0
+    assert np.allclose(np.sum(reg.feature_importances_), 1.0)

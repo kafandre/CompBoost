@@ -124,7 +124,18 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         # 3. Fit the model
         self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
-        # 4. Mark as fitted for scikit-learn
+        # 4. Calculate feature importances and features in
+        self.n_features_in_ = X.shape[1]
+        importances = np.zeros(self.n_features_in_)
+        selected = self.model_.history['selected_features']
+        for idx in selected:
+            importances[idx] += 1
+        if len(selected) > 0:
+            self.feature_importances_ = importances / len(selected)
+        else:
+            self.feature_importances_ = importances
+        
+        # 5. Mark as fitted for scikit-learn
         self.is_fitted_ = True
         return self
 
