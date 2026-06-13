@@ -1,10 +1,10 @@
 import numpy as np
 import torch
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_is_fitted, validate_data
 from .ComponentwiseBoostingModel import ComponentwiseBoostingModel
 
-class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
+class TorchCompBoostRegressor(RegressorMixin, BaseEstimator):
     """
     Scikit-Learn compatible wrapper for the PyTorch Component-wise Boosting Model.
 
@@ -24,8 +24,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         the model operates in competing mode, selecting the best learner per iteration.
     poly_degree : int, default=2
         The degree of the polynomial if "polynomial" is in `base_learner`.
-    tree_max_depth : int, default=1
-        Maximum depth of the decision tree (currently acts as decision stumps).
     n_bins : int, default=256
         Number of bins used for histogram-based tree splitting.
     spline_degree : int, default=2
@@ -92,10 +90,42 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
     def fit(self, X, y, X_val=None, y_val=None):
         if self.loss != 'mse':
             raise ValueError(f"loss must be 'mse'. Got: {self.loss}")
+        if (X_val is not None) != (y_val is not None):
+            raise ValueError("Both X_val and y_val must be provided together for validation tracking.")
+        if y is not None:
+            y = np.asarray(y)
+            if y.ndim == 2 and y.shape[1] == 1:
+                from sklearn.exceptions import DataConversionWarning
+                import warnings
+                warnings.warn(
+                    "A column-vector y was passed when a 1d array was expected. Please change "
+                    "the shape of y to (n_samples, ), for example using ravel().",
+                    DataConversionWarning,
+                    stacklevel=2
+                )
+                y = y.ravel()
+        if y_val is not None:
+            y_val = np.asarray(y_val)
+            if y_val.ndim == 2 and y_val.shape[1] == 1:
+                from sklearn.exceptions import DataConversionWarning
+                import warnings
+                warnings.warn(
+                    "A column-vector y_val was passed when a 1d array was expected. Please change "
+                    "the shape of y_val to (n_samples, ), for example using ravel().",
+                    DataConversionWarning,
+                    stacklevel=2
+                )
+                y_val = y_val.ravel()
+
+        original_columns = getattr(X, 'columns', None)
+
         # 1. Scikit-learn validation
-        X, y = check_X_y(X, y, y_numeric=True)
+        X, y = validate_data(self, X=X, y=y, y_numeric=True)
         if X_val is not None and y_val is not None:
-            X_val, y_val = check_X_y(X_val, y_val, y_numeric=True)
+            X_val, y_val = validate_data(self, X=X_val, y=y_val, y_numeric=True, reset=False)
+
+        if original_columns is not None and not hasattr(self, 'feature_names_in_'):
+            self.feature_names_in_ = np.array(original_columns, dtype=object)
 
         # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(
@@ -122,7 +152,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
         # 4. Calculate feature importances and features in
-        self.n_features_in_ = X.shape[1]
         importances = np.zeros(self.n_features_in_)
         selected = self.model_.history['selected_features']
         for idx in selected:
@@ -139,7 +168,7 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
     def predict(self, X, use_best_model=False):
         # 1. Scikit-learn validation
         check_is_fitted(self, 'is_fitted_')
-        X = check_array(X)
+        X = validate_data(self, X=X, reset=False)
 
         # 2. Predict using PyTorch engine
         preds = self.model_.predict(X, use_best_model=use_best_model)
@@ -173,6 +202,9 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
                 map_location = 'cpu'
         
         reg = torch.load(path, map_location=map_location, weights_only=False)
+        if type(reg).__name__ == "ComponentwiseBoostingModel":
+            raise TypeError("Loaded object is a ComponentwiseBoostingModel core engine, not a TorchCompBoostRegressor. Use ComponentwiseBoostingModel.load_model() instead.")
+            
         if map_location is not None:
             reg.to(map_location)
         return reg

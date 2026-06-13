@@ -193,3 +193,96 @@ def test_constant_features_bspline(synthetic_data):
     model_leg.fit(X_const, y)
     preds_leg = model_leg.predict(X_const)
     assert preds_leg.shape == (X.shape[0],)
+
+def test_bspline_prediction_cropping(synthetic_data):
+    """Verifies that the B-spline prediction path crops the design matrix if it has more columns than coeffs."""
+    X, y = synthetic_data
+    
+    # 1. Test legacy mode cropping
+    model_leg = ComponentwiseBoostingModel(n_estimators=1, base_learner="bspline")
+    model_leg.fit(X, y)
+    
+    # Manually truncate the coefficients to trigger the cropping branch
+    est_leg = model_leg.estimators_[0]
+    orig_coeffs_leg = est_leg['params']['coeffs']
+    est_leg['params']['coeffs'] = orig_coeffs_leg[:-1]
+    
+    preds_leg = model_leg.predict(X)
+    assert preds_leg.shape == (X.shape[0],)
+    
+    # 2. Test competing mode cropping
+    model_comp = ComponentwiseBoostingModel(n_estimators=1, base_learner=["bspline", "linear"])
+    model_comp.fit(X, y)
+    
+    # Mock a bspline estimator with truncated beta coefficients
+    n_basis = model_comp.n_knots + model_comp.spline_degree + 1
+    est_comp = model_comp.estimators_[0]
+    est_comp['learner'] = 'bspline'
+    est_comp['params'] = {
+        'beta': torch.zeros(n_basis - 1, device=model_comp.device),
+        'beta_lin': torch.zeros(2, device=model_comp.device),
+        'knots': np.linspace(-3, 3, model_comp.n_knots + 2 * model_comp.spline_degree + 2)
+    }
+    
+    preds_comp = model_comp.predict(X)
+    assert preds_comp.shape == (X.shape[0],)
+
+def test_asymmetric_validation_split(synthetic_data):
+    """Verifies that fit raises ValueError when validation or test splits are asymmetric."""
+    X, y = synthetic_data
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner="linear")
+    
+    # Asymmetric validation splits
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        model.fit(X, y, X_val=X)
+        
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        model.fit(X, y, y_val=y)
+        
+    # Asymmetric test splits
+    with pytest.raises(ValueError, match="Both X_test and y_test must be provided together"):
+        model.fit(X, y, X_test=X)
+        
+    with pytest.raises(ValueError, match="Both X_test and y_test must be provided together"):
+        model.fit(X, y, y_test=y)
+
+def test_invalid_base_learner(synthetic_data):
+    """Verifies that fit raises ValueError when base learner is invalid."""
+    X, y = synthetic_data
+    
+    # Single invalid base learner string
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner="invalid")
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid'"):
+        model.fit(X, y)
+        
+    # List containing invalid base learner
+    model_list = ComponentwiseBoostingModel(n_estimators=5, base_learner=["linear", "invalid_item"])
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid_item'"):
+        model_list.fit(X, y)
+
+def test_zero_estimators(synthetic_data):
+    """Verifies that the model can handle zero estimators and predicts the intercept."""
+    X, y = synthetic_data
+    model = ComponentwiseBoostingModel(n_estimators=0, base_learner="linear")
+    model.fit(X, y)
+    
+    preds = model.predict(X)
+    assert preds.shape == (X.shape[0],)
+    assert torch.allclose(preds, torch.full_like(preds, np.mean(y)))
+
+def test_single_feature_momentum(synthetic_data):
+    """Verifies that momentum feature selection runs on 1-feature data without warnings/errors."""
+    X, y = synthetic_data
+    X_single = X[:, :1]
+    
+    model = ComponentwiseBoostingModel(
+        n_estimators=5,
+        base_learner="linear",
+        use_momentum=True,
+        momentum_decay=0.9,
+        momentum_strength=1.0
+    )
+    # This should run successfully without PyTorch UserWarnings
+    model.fit(X_single, y)
+    preds = model.predict(X_single)
+    assert preds.shape == (X_single.shape[0],)

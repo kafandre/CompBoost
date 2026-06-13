@@ -109,7 +109,7 @@ class ComponentwiseBoostingModel:
             for i in range(n_features):
                 self.feature_momentum[i] = mom_vec[i].item()
                 
-            loss_std = torch.std(losses_tensor).detach()
+            loss_std = torch.std(losses_tensor).detach() if n_features > 1 else torch.tensor(0.0, device=losses_tensor.device)
             # compute scale factor for adjustment
             scale_factor = loss_std if loss_std > self.eps_momentum else 1.0
             adjustment = mom_vec * self.momentum_strength * scale_factor
@@ -130,23 +130,30 @@ class ComponentwiseBoostingModel:
         n_samples, n_features = X.shape
         device = X.device
         
+        # Convert X to double precision for stable precomputation
+        X_double = X.double()
+        
         assets = {}
 
         # Linear basis construction used for projection
-        ones = torch.ones(n_samples, 1, device=device)
+        ones = torch.ones(n_samples, 1, device=device, dtype=torch.float64)
         X_lin_list = []
+        self.feature_means_ = []
         for i in range(n_features):
-            X_lin_list.append(torch.cat([ones, X[:, i:i+1]], dim=1))
+            mean_i = torch.mean(X_double[:, i]).item()
+            self.feature_means_.append(mean_i)
+            centered_column = X_double[:, i:i+1] - mean_i
+            X_lin_list.append(torch.cat([ones, centered_column], dim=1))
         X_lin_all = torch.stack(X_lin_list, dim=0) # (F, N, 2)
         
         # Precompute projection matrices
         XTX = torch.bmm(X_lin_all.transpose(1, 2), X_lin_all)
         # Regularize matrix for numerical stability
-        XTX_reg = XTX + torch.eye(2, device=device).unsqueeze(0) * self.eps_linear
+        XTX_reg = XTX + torch.eye(2, device=device, dtype=torch.float64).unsqueeze(0) * self.eps_linear
         try:
             Gamma_proj = torch.linalg.solve(XTX_reg, X_lin_all.transpose(1, 2))
         except (torch._C._LinAlgError, RuntimeError):
-            XTX_fallback = XTX + torch.eye(2, device=device).unsqueeze(0) * 1e-4
+            XTX_fallback = XTX + torch.eye(2, device=device, dtype=torch.float64).unsqueeze(0) * 1e-4
             Gamma_proj = torch.linalg.solve(XTX_fallback, X_lin_all.transpose(1, 2))
 
         for learner_type in self.base_learners:
@@ -158,23 +165,23 @@ class ComponentwiseBoostingModel:
             
             if learner_type == 'polynomial':
                 # Generate Poly Basis
-                exponents = torch.arange(1, self.poly_degree + 1, device=device).float()
+                exponents = torch.arange(1, self.poly_degree + 1, device=device, dtype=torch.float64)
                 for i in range(n_features):
-                    poly_feats = X[:, i:i+1].pow(exponents)
-                    bias = torch.ones(n_samples, 1, device=device)
+                    poly_feats = X_double[:, i:i+1].pow(exponents)
+                    bias = torch.ones(n_samples, 1, device=device, dtype=torch.float64)
                     B_list.append(torch.cat([bias, poly_feats], dim=1))
                 # Ridge Penalty    
-                Omega = torch.eye(self.poly_degree + 1, device=device) 
+                Omega = torch.eye(self.poly_degree + 1, device=device, dtype=torch.float64) 
 
             elif learner_type == 'bspline':
                 # Generate B-Spline Basis
-                X_np = X.detach().cpu().numpy()
+                X_np = X_double.detach().cpu().numpy()
                 # calculate fixed target dimensions for basis
                 target_K = self.n_knots + self.spline_degree + 1
                 # Construct Omega
                 dummy_eye = np.eye(target_K)
                 D_fixed = np.diff(dummy_eye, n=2, axis=0)
-                Omega = torch.from_numpy(D_fixed.T @ D_fixed).float().to(device)
+                Omega = torch.from_numpy(D_fixed.T @ D_fixed).double().to(device)
 
                 for i in range(n_features):
                     # Determine knots with quantiles
@@ -197,7 +204,7 @@ class ComponentwiseBoostingModel:
                     # Design Matrix
                     dm_np = BSpline.design_matrix(X_np[:, i], t, self.spline_degree).toarray()
                 
-                # Paddding logc
+                    # Padding logic
                     current_K = dm_np.shape[1]
                     if current_K < target_K:
                         # Pad with zero columns on the right if matrix is smaller than target
@@ -207,7 +214,7 @@ class ComponentwiseBoostingModel:
                         # safety crop if matrix exceeds target dimension
                         dm_np = dm_np[:, :target_K]
                     
-                    B_list.append(torch.from_numpy(dm_np).float().to(device))
+                    B_list.append(torch.from_numpy(dm_np).double().to(device))
                 
             B_all = torch.stack(B_list, dim=0)
             
@@ -226,7 +233,7 @@ class ComponentwiseBoostingModel:
                 try:
                     Inv = torch.linalg.inv(M)
                 except:
-                    Inv = torch.linalg.inv(M + torch.eye(n_k, device=device)*1e-6)
+                    Inv = torch.linalg.inv(M + torch.eye(n_k, device=device, dtype=torch.float64)*(1e-12 + lam * 1e-12))
                 S = Inv @ BtB
                 return torch.trace(S).item()
 
@@ -238,7 +245,7 @@ class ComponentwiseBoostingModel:
 
                 if torch.all(b_curr.abs() < 1e-9):
                     # zero matrix case if basis is completely flat
-                    Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device)
+                    Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device, dtype=torch.float64)
                 else:
                     target = min(self.target_df, max_rank - 0.1)
                     
@@ -252,9 +259,9 @@ class ComponentwiseBoostingModel:
                     # compute penalized least squares solver matrix
                     BtB = b_curr.T @ b_curr
                     try:
-                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*self.eps_linear)
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*self.eps_linear)
                     except (torch._C._LinAlgError, RuntimeError):
-                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*1e-4)
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*(1e-6 + best_lam * 1e-12))
                     Solver = M_inv @ b_curr.T
                 
                 Solver_matrices.append(Solver)
@@ -263,12 +270,12 @@ class ComponentwiseBoostingModel:
             Solvers_stacked = torch.stack(Solver_matrices, dim=0)
             
             assets[learner_type] = {
-                'B_tilde': B_tilde,
-                'Solver': Solvers_stacked,
-                'Gamma': Gamma
+                'B_tilde': B_tilde.float(),
+                'Solver': Solvers_stacked.float(),
+                'Gamma': Gamma.float()
             }
             
-        return assets, X_lin_all
+        return assets, X_lin_all.float()
 
     # Legacy Solvers for single learner mode
     
@@ -372,7 +379,16 @@ class ComponentwiseBoostingModel:
         n_features, n_samples, n_basis = A.shape
         device = A.device
 
-        # reshape target and transpose design matrices for batched operations
+        # If precomputed P-spline solvers are available, use them directly
+        if hasattr(self, 'legacy_bspline_solvers_') and self.legacy_bspline_solvers_ is not None:
+            target_expanded = target.view(1, n_samples, 1).expand(n_features, n_samples, 1)
+            beta = torch.bmm(self.legacy_bspline_solvers_, target_expanded).squeeze(-1)
+            preds = torch.bmm(A, beta.unsqueeze(-1)).squeeze(-1)
+            target_rep = target.unsqueeze(0)
+            losses = ((preds - target_rep)**2).mean(dim=1)
+            return beta, losses
+
+        # Fallback to standard Ridge regularized solver
         Y = target.view(1, n_samples, 1).expand(n_features, n_samples, 1)
         A_T = A.transpose(1, 2)
         ATA = torch.bmm(A_T, A)
@@ -393,7 +409,16 @@ class ComponentwiseBoostingModel:
         losses = ((preds - target_rep)**2).mean(dim=1)
         return beta.squeeze(-1), losses
 
+    @torch.no_grad()
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
+        valid_learners = {"linear", "polynomial", "tree", "bspline"}
+        for learner in self.base_learners:
+            if learner not in valid_learners:
+                raise ValueError(f"Invalid base_learner '{learner}'. Must be one of {valid_learners}.")
+        if (X_val is not None) != (y_val is not None):
+            raise ValueError("Both X_val and y_val must be provided together for validation tracking.")
+        if (X_test is not None) != (y_test is not None):
+            raise ValueError("Both X_test and y_test must be provided together for testing tracking.")
         # Convert inputs to tensors and push to device
         X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
         y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
@@ -507,6 +532,45 @@ class ComponentwiseBoostingModel:
                         
                     basis_matrices.append(torch.from_numpy(dm_arr).float().to(X_train.device))
                 self.A_bspline_legacy = torch.stack(basis_matrices, dim=0)
+
+                # Precompute penalized P-spline solvers to match target_df in float64
+                self.legacy_bspline_solvers_ = []
+                device = X_train.device
+                dummy_eye = np.eye(target_K)
+                D_fixed = np.diff(dummy_eye, n=2, axis=0)
+                Omega = torch.from_numpy(D_fixed.T @ D_fixed).double().to(device)
+
+                def calc_df(lam, BtB_mat, Om):
+                    n_k = BtB_mat.shape[0]
+                    M = BtB_mat + lam * Om
+                    try:
+                        Inv = torch.linalg.inv(M)
+                    except:
+                        Inv = torch.linalg.inv(M + torch.eye(n_k, device=device, dtype=torch.float64)*(1e-12 + lam * 1e-12))
+                    S = Inv @ BtB_mat
+                    return torch.trace(S).item()
+
+                for f_idx in range(n_features):
+                    b_curr = self.A_bspline_legacy[f_idx].double()
+                    BtB = b_curr.T @ b_curr
+                    max_rank = min(b_curr.shape)
+                    
+                    if torch.all(b_curr.abs() < 1e-9):
+                        Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device, dtype=torch.float64)
+                    else:
+                        target = min(self.target_df, max_rank - 0.1)
+                        res = minimize_scalar(
+                            lambda l: (calc_df(10**l, BtB, Omega) - target)**2,
+                            bounds=(-5, 5), method='bounded'
+                        )
+                        best_lam = 10**res.x
+                        try:
+                            M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*self.eps_linear)
+                        except (torch._C._LinAlgError, RuntimeError):
+                            M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*(1e-6 + best_lam * 1e-12))
+                        Solver = M_inv @ b_curr.T
+                    self.legacy_bspline_solvers_.append(Solver.float())
+                self.legacy_bspline_solvers_ = torch.stack(self.legacy_bspline_solvers_, dim=0)
 
         # Boosting loop
         best_val_loss = float('inf')
@@ -629,7 +693,11 @@ class ComponentwiseBoostingModel:
                     Gamma_f = self.competing_assets_[best_learner_type]['Gamma'][best_idx]
                     
                     # Calculate linear adjustment for orthogonalized bases
-                    beta_lin_adj = - torch.mv(Gamma_f, beta_orth)
+                    G_beta = torch.mv(Gamma_f, beta_orth)
+                    mean_f = self.feature_means_[best_idx]
+                    intercept_adj = - G_beta[0] + mean_f * G_beta[1]
+                    slope_adj = - G_beta[1]
+                    beta_lin_adj = torch.stack([intercept_adj, slope_adj])
                     
                     best_params = {
                         'beta': beta_orth,
@@ -719,6 +787,8 @@ class ComponentwiseBoostingModel:
                         dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                         if dm.shape[1] < coeffs.shape[0]:
                             dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                        elif dm.shape[1] > coeffs.shape[0]:
+                            dm = dm[:, :coeffs.shape[0]]
                         
                         pred = torch.from_numpy(dm @ coeffs).float().to(X_in.device)
                         
@@ -751,6 +821,7 @@ class ComponentwiseBoostingModel:
             if self.verbose > 0 and (i+1) % self.verbose == 0:
                 print(f"Iter {i+1}/{self.n_estimators} | Train MSE: {train_mse:.5f}")
 
+    @torch.no_grad()
     def predict(self, X, use_best_model=False):
         X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
 
@@ -818,9 +889,11 @@ class ComponentwiseBoostingModel:
                     x_np = np.clip(x_np, knots[0], knots[-1])
                     dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                     
-                    # Pad b-spline design matrix if needed
+                    # Pad or crop b-spline design matrix if needed
                     if dm.shape[1] < coeffs.shape[0]:
                         dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                    elif dm.shape[1] > coeffs.shape[0]:
+                        dm = dm[:, :coeffs.shape[0]]
                     
                     val_spline = torch.from_numpy(dm @ coeffs).float().to(X.device)
                     val_lin = lin_coeffs[0] + lin_coeffs[1] * x_f.flatten()
@@ -832,9 +905,11 @@ class ComponentwiseBoostingModel:
                     x_np = np.clip(x_np, knots[0], knots[-1])
                     dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                     
-                    # Pad b-spline design matrix if needed
+                    # Pad or crop b-spline design matrix if needed
                     if dm.shape[1] < coeffs.shape[0]:
                         dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                    elif dm.shape[1] > coeffs.shape[0]:
+                        dm = dm[:, :coeffs.shape[0]]
 
                     update = torch.from_numpy(dm @ coeffs).float().to(X.device)
             
@@ -861,6 +936,9 @@ class ComponentwiseBoostingModel:
                         
         if hasattr(self, 'A_bspline_legacy') and self.A_bspline_legacy is not None:
             self.A_bspline_legacy = self.A_bspline_legacy.to(device)
+
+        if hasattr(self, 'legacy_bspline_solvers_') and self.legacy_bspline_solvers_ is not None:
+            self.legacy_bspline_solvers_ = self.legacy_bspline_solvers_.to(device)
             
         for est in self.estimators_:
             params = est['params']
@@ -886,6 +964,9 @@ class ComponentwiseBoostingModel:
                 map_location = 'cpu'
         
         model = torch.load(path, map_location=map_location, weights_only=False)
+        if type(model).__name__ == "TorchCompBoostRegressor":
+            raise TypeError("Loaded object is a TorchCompBoostRegressor wrapper, not a ComponentwiseBoostingModel. Use TorchCompBoostRegressor.load_model() instead.")
+            
         if map_location is not None:
             model.to(map_location)
         return model

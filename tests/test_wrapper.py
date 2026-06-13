@@ -146,3 +146,66 @@ def test_wrapper_predict_use_best_model(numpy_data):
     
     if reg.model_.best_iteration_ < reg.n_estimators:
         assert not np.allclose(preds_full, preds_best)
+
+def test_wrapper_asymmetric_validation_split(numpy_data):
+    """Verifies that the wrapper raises ValueError when validation splits are asymmetric."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
+    
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        reg.fit(X, y, X_val=X)
+        
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        reg.fit(X, y, y_val=y)
+
+def test_wrapper_invalid_base_learner(numpy_data):
+    """Verifies that the wrapper raises ValueError when base learner is invalid."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="invalid")
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid'"):
+        reg.fit(X, y)
+
+def test_wrapper_feature_names_and_validation(numpy_data):
+    """Verifies that feature_names_in_ is set for pandas DataFrames and predict checks feature shape."""
+    X, y = numpy_data
+    
+    # Mock a pandas DataFrame using a subclass of np.ndarray
+    class MockDataFrame(np.ndarray):
+        pass
+    
+    df = X.view(MockDataFrame)
+    df.columns = [f"feat_{i}" for i in range(X.shape[1])]
+    
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
+    reg.fit(df, y)
+    
+    assert hasattr(reg, 'feature_names_in_')
+    assert list(reg.feature_names_in_) == [f"feat_{i}" for i in range(X.shape[1])]
+    
+    # Predict with wrong shape should raise ValueError
+    X_wrong = np.random.randn(10, X.shape[1] + 1)
+    with pytest.raises(ValueError, match="Number of features must match|is expecting"):
+        reg.predict(X_wrong)
+
+def test_serialization_cross_loading(numpy_data, tmp_path):
+    """Verifies that loading mismatched serialized types raises TypeError."""
+    from compboost.models.ComponentwiseBoostingModel import ComponentwiseBoostingModel
+    X, y = numpy_data
+    
+    # 1. Core Model saved, loaded via wrapper
+    core_model = ComponentwiseBoostingModel(n_estimators=3, base_learner="linear")
+    core_model.fit(X, y)
+    core_path = tmp_path / "core_model.pt"
+    core_model.save_model(core_path)
+    
+    with pytest.raises(TypeError, match="Loaded object is a ComponentwiseBoostingModel core engine"):
+        TorchCompBoostRegressor.load_model(core_path)
+        
+    # 2. Wrapper saved, loaded via core model
+    wrapper_model = TorchCompBoostRegressor(n_estimators=3, base_learner="linear")
+    wrapper_model.fit(X, y)
+    wrapper_path = tmp_path / "wrapper_model.pt"
+    wrapper_model.save_model(wrapper_path)
+    
+    with pytest.raises(TypeError, match="Loaded object is a TorchCompBoostRegressor wrapper"):
+        ComponentwiseBoostingModel.load_model(wrapper_path)
