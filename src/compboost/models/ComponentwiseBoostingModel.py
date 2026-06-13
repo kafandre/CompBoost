@@ -787,6 +787,8 @@ class ComponentwiseBoostingModel:
                         dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                         if dm.shape[1] < coeffs.shape[0]:
                             dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                        elif dm.shape[1] > coeffs.shape[0]:
+                            dm = dm[:, :coeffs.shape[0]]
                         
                         pred = torch.from_numpy(dm @ coeffs).float().to(X_in.device)
                         
