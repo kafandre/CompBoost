@@ -375,7 +375,16 @@ class ComponentwiseBoostingModel:
         n_features, n_samples, n_basis = A.shape
         device = A.device
 
-        # reshape target and transpose design matrices for batched operations
+        # If precomputed P-spline solvers are available, use them directly
+        if hasattr(self, 'legacy_bspline_solvers_') and self.legacy_bspline_solvers_ is not None:
+            target_expanded = target.view(1, n_samples, 1).expand(n_features, n_samples, 1)
+            beta = torch.bmm(self.legacy_bspline_solvers_, target_expanded).squeeze(-1)
+            preds = torch.bmm(A, beta.unsqueeze(-1)).squeeze(-1)
+            target_rep = target.unsqueeze(0)
+            losses = ((preds - target_rep)**2).mean(dim=1)
+            return beta, losses
+
+        # Fallback to standard Ridge regularized solver
         Y = target.view(1, n_samples, 1).expand(n_features, n_samples, 1)
         A_T = A.transpose(1, 2)
         ATA = torch.bmm(A_T, A)
@@ -519,6 +528,45 @@ class ComponentwiseBoostingModel:
                         
                     basis_matrices.append(torch.from_numpy(dm_arr).float().to(X_train.device))
                 self.A_bspline_legacy = torch.stack(basis_matrices, dim=0)
+
+                # Precompute penalized P-spline solvers to match target_df in float64
+                self.legacy_bspline_solvers_ = []
+                device = X_train.device
+                dummy_eye = np.eye(target_K)
+                D_fixed = np.diff(dummy_eye, n=2, axis=0)
+                Omega = torch.from_numpy(D_fixed.T @ D_fixed).double().to(device)
+
+                def calc_df(lam, BtB_mat, Om):
+                    n_k = BtB_mat.shape[0]
+                    M = BtB_mat + lam * Om
+                    try:
+                        Inv = torch.linalg.inv(M)
+                    except:
+                        Inv = torch.linalg.inv(M + torch.eye(n_k, device=device, dtype=torch.float64)*(1e-12 + lam * 1e-12))
+                    S = Inv @ BtB_mat
+                    return torch.trace(S).item()
+
+                for f_idx in range(n_features):
+                    b_curr = self.A_bspline_legacy[f_idx].double()
+                    BtB = b_curr.T @ b_curr
+                    max_rank = min(b_curr.shape)
+                    
+                    if torch.all(b_curr.abs() < 1e-9):
+                        Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device, dtype=torch.float64)
+                    else:
+                        target = min(self.target_df, max_rank - 0.1)
+                        res = minimize_scalar(
+                            lambda l: (calc_df(10**l, BtB, Omega) - target)**2,
+                            bounds=(-5, 5), method='bounded'
+                        )
+                        best_lam = 10**res.x
+                        try:
+                            M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*self.eps_linear)
+                        except (torch._C._LinAlgError, RuntimeError):
+                            M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*(1e-6 + best_lam * 1e-12))
+                        Solver = M_inv @ b_curr.T
+                    self.legacy_bspline_solvers_.append(Solver.float())
+                self.legacy_bspline_solvers_ = torch.stack(self.legacy_bspline_solvers_, dim=0)
 
         # Boosting loop
         best_val_loss = float('inf')
@@ -878,6 +926,9 @@ class ComponentwiseBoostingModel:
                         
         if hasattr(self, 'A_bspline_legacy') and self.A_bspline_legacy is not None:
             self.A_bspline_legacy = self.A_bspline_legacy.to(device)
+
+        if hasattr(self, 'legacy_bspline_solvers_') and self.legacy_bspline_solvers_ is not None:
+            self.legacy_bspline_solvers_ = self.legacy_bspline_solvers_.to(device)
             
         for est in self.estimators_:
             params = est['params']
