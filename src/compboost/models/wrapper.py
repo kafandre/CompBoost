@@ -24,8 +24,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         the model operates in competing mode, selecting the best learner per iteration.
     poly_degree : int, default=2
         The degree of the polynomial if "polynomial" is in `base_learner`.
-    tree_max_depth : int, default=1
-        Maximum depth of the decision tree (currently acts as decision stumps).
     n_bins : int, default=256
         Number of bins used for histogram-based tree splitting.
     spline_degree : int, default=2
