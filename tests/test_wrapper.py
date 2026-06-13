@@ -184,7 +184,7 @@ def test_wrapper_feature_names_and_validation(numpy_data):
     
     # Predict with wrong shape should raise ValueError
     X_wrong = np.random.randn(10, X.shape[1] + 1)
-    with pytest.raises(ValueError, match="Number of features must match training data"):
+    with pytest.raises(ValueError, match="Number of features must match|is expecting"):
         reg.predict(X_wrong)
 
 def test_serialization_cross_loading(numpy_data, tmp_path):

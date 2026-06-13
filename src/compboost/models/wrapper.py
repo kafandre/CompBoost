@@ -1,10 +1,10 @@
 import numpy as np
 import torch
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_is_fitted, validate_data
 from .ComponentwiseBoostingModel import ComponentwiseBoostingModel
 
-class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
+class TorchCompBoostRegressor(RegressorMixin, BaseEstimator):
     """
     Scikit-Learn compatible wrapper for the PyTorch Component-wise Boosting Model.
 
@@ -95,18 +95,37 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         if y is not None:
             y = np.asarray(y)
             if y.ndim == 2 and y.shape[1] == 1:
+                from sklearn.exceptions import DataConversionWarning
+                import warnings
+                warnings.warn(
+                    "A column-vector y was passed when a 1d array was expected. Please change "
+                    "the shape of y to (n_samples, ), for example using ravel().",
+                    DataConversionWarning,
+                    stacklevel=2
+                )
                 y = y.ravel()
         if y_val is not None:
             y_val = np.asarray(y_val)
             if y_val.ndim == 2 and y_val.shape[1] == 1:
+                from sklearn.exceptions import DataConversionWarning
+                import warnings
+                warnings.warn(
+                    "A column-vector y_val was passed when a 1d array was expected. Please change "
+                    "the shape of y_val to (n_samples, ), for example using ravel().",
+                    DataConversionWarning,
+                    stacklevel=2
+                )
                 y_val = y_val.ravel()
-        # Store feature names if X is a DataFrame
-        if hasattr(X, 'columns'):
-            self.feature_names_in_ = np.array(X.columns, dtype=object)
+
+        original_columns = getattr(X, 'columns', None)
+
         # 1. Scikit-learn validation
-        X, y = check_X_y(X, y, y_numeric=True)
+        X, y = validate_data(self, X=X, y=y, y_numeric=True)
         if X_val is not None and y_val is not None:
-            X_val, y_val = check_X_y(X_val, y_val, y_numeric=True)
+            X_val, y_val = validate_data(self, X=X_val, y=y_val, y_numeric=True, reset=False)
+
+        if original_columns is not None and not hasattr(self, 'feature_names_in_'):
+            self.feature_names_in_ = np.array(original_columns, dtype=object)
 
         # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(
@@ -133,7 +152,6 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         self.model_.fit(X, y, X_val=X_val, y_val=y_val)
         
         # 4. Calculate feature importances and features in
-        self.n_features_in_ = X.shape[1]
         importances = np.zeros(self.n_features_in_)
         selected = self.model_.history['selected_features']
         for idx in selected:
@@ -150,9 +168,7 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
     def predict(self, X, use_best_model=False):
         # 1. Scikit-learn validation
         check_is_fitted(self, 'is_fitted_')
-        X = check_array(X)
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError(f"Number of features must match training data. Got {X.shape[1]}, expected {self.n_features_in_}.")
+        X = validate_data(self, X=X, reset=False)
 
         # 2. Predict using PyTorch engine
         preds = self.model_.predict(X, use_best_model=use_best_model)
