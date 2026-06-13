@@ -92,6 +92,8 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
     def fit(self, X, y, X_val=None, y_val=None):
         if self.loss != 'mse':
             raise ValueError(f"loss must be 'mse'. Got: {self.loss}")
+        if (X_val is not None) != (y_val is not None):
+            raise ValueError("Both X_val and y_val must be provided together for validation tracking.")
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
         if X_val is not None and y_val is not None:

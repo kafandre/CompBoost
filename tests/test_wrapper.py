@@ -146,3 +146,14 @@ def test_wrapper_predict_use_best_model(numpy_data):
     
     if reg.model_.best_iteration_ < reg.n_estimators:
         assert not np.allclose(preds_full, preds_best)
+
+def test_wrapper_asymmetric_validation_split(numpy_data):
+    """Verifies that the wrapper raises ValueError when validation splits are asymmetric."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
+    
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        reg.fit(X, y, X_val=X)
+        
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        reg.fit(X, y, y_val=y)

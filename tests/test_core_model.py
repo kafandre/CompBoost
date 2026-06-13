@@ -226,3 +226,22 @@ def test_bspline_prediction_cropping(synthetic_data):
     
     preds_comp = model_comp.predict(X)
     assert preds_comp.shape == (X.shape[0],)
+
+def test_asymmetric_validation_split(synthetic_data):
+    """Verifies that fit raises ValueError when validation or test splits are asymmetric."""
+    X, y = synthetic_data
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner="linear")
+    
+    # Asymmetric validation splits
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        model.fit(X, y, X_val=X)
+        
+    with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
+        model.fit(X, y, y_val=y)
+        
+    # Asymmetric test splits
+    with pytest.raises(ValueError, match="Both X_test and y_test must be provided together"):
+        model.fit(X, y, X_test=X)
+        
+    with pytest.raises(ValueError, match="Both X_test and y_test must be provided together"):
+        model.fit(X, y, y_test=y)

@@ -394,6 +394,10 @@ class ComponentwiseBoostingModel:
         return beta.squeeze(-1), losses
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
+        if (X_val is not None) != (y_val is not None):
+            raise ValueError("Both X_val and y_val must be provided together for validation tracking.")
+        if (X_test is not None) != (y_test is not None):
+            raise ValueError("Both X_test and y_test must be provided together for testing tracking.")
         # Convert inputs to tensors and push to device
         X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
         y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
