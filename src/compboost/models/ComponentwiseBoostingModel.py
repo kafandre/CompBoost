@@ -138,8 +138,12 @@ class ComponentwiseBoostingModel:
         # Linear basis construction used for projection
         ones = torch.ones(n_samples, 1, device=device, dtype=torch.float64)
         X_lin_list = []
+        self.feature_means_ = []
         for i in range(n_features):
-            X_lin_list.append(torch.cat([ones, X_double[:, i:i+1]], dim=1))
+            mean_i = torch.mean(X_double[:, i]).item()
+            self.feature_means_.append(mean_i)
+            centered_column = X_double[:, i:i+1] - mean_i
+            X_lin_list.append(torch.cat([ones, centered_column], dim=1))
         X_lin_all = torch.stack(X_lin_list, dim=0) # (F, N, 2)
         
         # Precompute projection matrices
@@ -689,7 +693,11 @@ class ComponentwiseBoostingModel:
                     Gamma_f = self.competing_assets_[best_learner_type]['Gamma'][best_idx]
                     
                     # Calculate linear adjustment for orthogonalized bases
-                    beta_lin_adj = - torch.mv(Gamma_f, beta_orth)
+                    G_beta = torch.mv(Gamma_f, beta_orth)
+                    mean_f = self.feature_means_[best_idx]
+                    intercept_adj = - G_beta[0] + mean_f * G_beta[1]
+                    slope_adj = - G_beta[1]
+                    beta_lin_adj = torch.stack([intercept_adj, slope_adj])
                     
                     best_params = {
                         'beta': beta_orth,
