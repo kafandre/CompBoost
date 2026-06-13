@@ -818,9 +818,11 @@ class ComponentwiseBoostingModel:
                     x_np = np.clip(x_np, knots[0], knots[-1])
                     dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                     
-                    # Pad b-spline design matrix if needed
+                    # Pad or crop b-spline design matrix if needed
                     if dm.shape[1] < coeffs.shape[0]:
                         dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                    elif dm.shape[1] > coeffs.shape[0]:
+                        dm = dm[:, :coeffs.shape[0]]
                     
                     val_spline = torch.from_numpy(dm @ coeffs).float().to(X.device)
                     val_lin = lin_coeffs[0] + lin_coeffs[1] * x_f.flatten()
@@ -832,9 +834,11 @@ class ComponentwiseBoostingModel:
                     x_np = np.clip(x_np, knots[0], knots[-1])
                     dm = BSpline.design_matrix(x_np, knots, self.spline_degree).toarray()
                     
-                    # Pad b-spline design matrix if needed
+                    # Pad or crop b-spline design matrix if needed
                     if dm.shape[1] < coeffs.shape[0]:
                         dm = np.pad(dm, ((0,0), (0, coeffs.shape[0] - dm.shape[1])), mode='constant')
+                    elif dm.shape[1] > coeffs.shape[0]:
+                        dm = dm[:, :coeffs.shape[0]]
 
                     update = torch.from_numpy(dm @ coeffs).float().to(X.device)
             

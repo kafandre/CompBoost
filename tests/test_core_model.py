@@ -193,3 +193,36 @@ def test_constant_features_bspline(synthetic_data):
     model_leg.fit(X_const, y)
     preds_leg = model_leg.predict(X_const)
     assert preds_leg.shape == (X.shape[0],)
+
+def test_bspline_prediction_cropping(synthetic_data):
+    """Verifies that the B-spline prediction path crops the design matrix if it has more columns than coeffs."""
+    X, y = synthetic_data
+    
+    # 1. Test legacy mode cropping
+    model_leg = ComponentwiseBoostingModel(n_estimators=1, base_learner="bspline")
+    model_leg.fit(X, y)
+    
+    # Manually truncate the coefficients to trigger the cropping branch
+    est_leg = model_leg.estimators_[0]
+    orig_coeffs_leg = est_leg['params']['coeffs']
+    est_leg['params']['coeffs'] = orig_coeffs_leg[:-1]
+    
+    preds_leg = model_leg.predict(X)
+    assert preds_leg.shape == (X.shape[0],)
+    
+    # 2. Test competing mode cropping
+    model_comp = ComponentwiseBoostingModel(n_estimators=1, base_learner=["bspline", "linear"])
+    model_comp.fit(X, y)
+    
+    # Mock a bspline estimator with truncated beta coefficients
+    n_basis = model_comp.n_knots + model_comp.spline_degree + 1
+    est_comp = model_comp.estimators_[0]
+    est_comp['learner'] = 'bspline'
+    est_comp['params'] = {
+        'beta': torch.zeros(n_basis - 1, device=model_comp.device),
+        'beta_lin': torch.zeros(2, device=model_comp.device),
+        'knots': np.linspace(-3, 3, model_comp.n_knots + 2 * model_comp.spline_degree + 2)
+    }
+    
+    preds_comp = model_comp.predict(X)
+    assert preds_comp.shape == (X.shape[0],)
