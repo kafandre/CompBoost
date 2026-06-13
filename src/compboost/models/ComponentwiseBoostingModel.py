@@ -394,6 +394,10 @@ class ComponentwiseBoostingModel:
         return beta.squeeze(-1), losses
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
+        valid_learners = {"linear", "polynomial", "tree", "bspline"}
+        for learner in self.base_learners:
+            if learner not in valid_learners:
+                raise ValueError(f"Invalid base_learner '{learner}'. Must be one of {valid_learners}.")
         if (X_val is not None) != (y_val is not None):
             raise ValueError("Both X_val and y_val must be provided together for validation tracking.")
         if (X_test is not None) != (y_test is not None):

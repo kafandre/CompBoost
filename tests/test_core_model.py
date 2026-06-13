@@ -245,3 +245,17 @@ def test_asymmetric_validation_split(synthetic_data):
         
     with pytest.raises(ValueError, match="Both X_test and y_test must be provided together"):
         model.fit(X, y, y_test=y)
+
+def test_invalid_base_learner(synthetic_data):
+    """Verifies that fit raises ValueError when base learner is invalid."""
+    X, y = synthetic_data
+    
+    # Single invalid base learner string
+    model = ComponentwiseBoostingModel(n_estimators=5, base_learner="invalid")
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid'"):
+        model.fit(X, y)
+        
+    # List containing invalid base learner
+    model_list = ComponentwiseBoostingModel(n_estimators=5, base_learner=["linear", "invalid_item"])
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid_item'"):
+        model_list.fit(X, y)
