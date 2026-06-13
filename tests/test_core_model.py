@@ -259,3 +259,13 @@ def test_invalid_base_learner(synthetic_data):
     model_list = ComponentwiseBoostingModel(n_estimators=5, base_learner=["linear", "invalid_item"])
     with pytest.raises(ValueError, match="Invalid base_learner 'invalid_item'"):
         model_list.fit(X, y)
+
+def test_zero_estimators(synthetic_data):
+    """Verifies that the model can handle zero estimators and predicts the intercept."""
+    X, y = synthetic_data
+    model = ComponentwiseBoostingModel(n_estimators=0, base_learner="linear")
+    model.fit(X, y)
+    
+    preds = model.predict(X)
+    assert preds.shape == (X.shape[0],)
+    assert torch.allclose(preds, torch.full_like(preds, np.mean(y)))

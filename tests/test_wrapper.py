@@ -157,3 +157,10 @@ def test_wrapper_asymmetric_validation_split(numpy_data):
         
     with pytest.raises(ValueError, match="Both X_val and y_val must be provided together"):
         reg.fit(X, y, y_val=y)
+
+def test_wrapper_invalid_base_learner(numpy_data):
+    """Verifies that the wrapper raises ValueError when base learner is invalid."""
+    X, y = numpy_data
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="invalid")
+    with pytest.raises(ValueError, match="Invalid base_learner 'invalid'"):
+        reg.fit(X, y)
