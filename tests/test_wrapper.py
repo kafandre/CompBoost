@@ -186,3 +186,26 @@ def test_wrapper_feature_names_and_validation(numpy_data):
     X_wrong = np.random.randn(10, X.shape[1] + 1)
     with pytest.raises(ValueError, match="Number of features must match training data"):
         reg.predict(X_wrong)
+
+def test_serialization_cross_loading(numpy_data, tmp_path):
+    """Verifies that loading mismatched serialized types raises TypeError."""
+    from compboost.models.ComponentwiseBoostingModel import ComponentwiseBoostingModel
+    X, y = numpy_data
+    
+    # 1. Core Model saved, loaded via wrapper
+    core_model = ComponentwiseBoostingModel(n_estimators=3, base_learner="linear")
+    core_model.fit(X, y)
+    core_path = tmp_path / "core_model.pt"
+    core_model.save_model(core_path)
+    
+    with pytest.raises(TypeError, match="Loaded object is a ComponentwiseBoostingModel core engine"):
+        TorchCompBoostRegressor.load_model(core_path)
+        
+    # 2. Wrapper saved, loaded via core model
+    wrapper_model = TorchCompBoostRegressor(n_estimators=3, base_learner="linear")
+    wrapper_model.fit(X, y)
+    wrapper_path = tmp_path / "wrapper_model.pt"
+    wrapper_model.save_model(wrapper_path)
+    
+    with pytest.raises(TypeError, match="Loaded object is a TorchCompBoostRegressor wrapper"):
+        ComponentwiseBoostingModel.load_model(wrapper_path)

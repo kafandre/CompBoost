@@ -186,6 +186,9 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
                 map_location = 'cpu'
         
         reg = torch.load(path, map_location=map_location, weights_only=False)
+        if type(reg).__name__ == "ComponentwiseBoostingModel":
+            raise TypeError("Loaded object is a ComponentwiseBoostingModel core engine, not a TorchCompBoostRegressor. Use ComponentwiseBoostingModel.load_model() instead.")
+            
         if map_location is not None:
             reg.to(map_location)
         return reg

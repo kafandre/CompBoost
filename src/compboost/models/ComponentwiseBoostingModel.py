@@ -964,6 +964,9 @@ class ComponentwiseBoostingModel:
                 map_location = 'cpu'
         
         model = torch.load(path, map_location=map_location, weights_only=False)
+        if type(model).__name__ == "TorchCompBoostRegressor":
+            raise TypeError("Loaded object is a TorchCompBoostRegressor wrapper, not a ComponentwiseBoostingModel. Use TorchCompBoostRegressor.load_model() instead.")
+            
         if map_location is not None:
             model.to(map_location)
         return model
