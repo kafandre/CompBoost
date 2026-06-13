@@ -130,23 +130,26 @@ class ComponentwiseBoostingModel:
         n_samples, n_features = X.shape
         device = X.device
         
+        # Convert X to double precision for stable precomputation
+        X_double = X.double()
+        
         assets = {}
 
         # Linear basis construction used for projection
-        ones = torch.ones(n_samples, 1, device=device)
+        ones = torch.ones(n_samples, 1, device=device, dtype=torch.float64)
         X_lin_list = []
         for i in range(n_features):
-            X_lin_list.append(torch.cat([ones, X[:, i:i+1]], dim=1))
+            X_lin_list.append(torch.cat([ones, X_double[:, i:i+1]], dim=1))
         X_lin_all = torch.stack(X_lin_list, dim=0) # (F, N, 2)
         
         # Precompute projection matrices
         XTX = torch.bmm(X_lin_all.transpose(1, 2), X_lin_all)
         # Regularize matrix for numerical stability
-        XTX_reg = XTX + torch.eye(2, device=device).unsqueeze(0) * self.eps_linear
+        XTX_reg = XTX + torch.eye(2, device=device, dtype=torch.float64).unsqueeze(0) * self.eps_linear
         try:
             Gamma_proj = torch.linalg.solve(XTX_reg, X_lin_all.transpose(1, 2))
         except (torch._C._LinAlgError, RuntimeError):
-            XTX_fallback = XTX + torch.eye(2, device=device).unsqueeze(0) * 1e-4
+            XTX_fallback = XTX + torch.eye(2, device=device, dtype=torch.float64).unsqueeze(0) * 1e-4
             Gamma_proj = torch.linalg.solve(XTX_fallback, X_lin_all.transpose(1, 2))
 
         for learner_type in self.base_learners:
@@ -158,23 +161,23 @@ class ComponentwiseBoostingModel:
             
             if learner_type == 'polynomial':
                 # Generate Poly Basis
-                exponents = torch.arange(1, self.poly_degree + 1, device=device).float()
+                exponents = torch.arange(1, self.poly_degree + 1, device=device, dtype=torch.float64)
                 for i in range(n_features):
-                    poly_feats = X[:, i:i+1].pow(exponents)
-                    bias = torch.ones(n_samples, 1, device=device)
+                    poly_feats = X_double[:, i:i+1].pow(exponents)
+                    bias = torch.ones(n_samples, 1, device=device, dtype=torch.float64)
                     B_list.append(torch.cat([bias, poly_feats], dim=1))
                 # Ridge Penalty    
-                Omega = torch.eye(self.poly_degree + 1, device=device) 
+                Omega = torch.eye(self.poly_degree + 1, device=device, dtype=torch.float64) 
 
             elif learner_type == 'bspline':
                 # Generate B-Spline Basis
-                X_np = X.detach().cpu().numpy()
+                X_np = X_double.detach().cpu().numpy()
                 # calculate fixed target dimensions for basis
                 target_K = self.n_knots + self.spline_degree + 1
                 # Construct Omega
                 dummy_eye = np.eye(target_K)
                 D_fixed = np.diff(dummy_eye, n=2, axis=0)
-                Omega = torch.from_numpy(D_fixed.T @ D_fixed).float().to(device)
+                Omega = torch.from_numpy(D_fixed.T @ D_fixed).double().to(device)
 
                 for i in range(n_features):
                     # Determine knots with quantiles
@@ -197,7 +200,7 @@ class ComponentwiseBoostingModel:
                     # Design Matrix
                     dm_np = BSpline.design_matrix(X_np[:, i], t, self.spline_degree).toarray()
                 
-                # Paddding logc
+                    # Padding logic
                     current_K = dm_np.shape[1]
                     if current_K < target_K:
                         # Pad with zero columns on the right if matrix is smaller than target
@@ -207,7 +210,7 @@ class ComponentwiseBoostingModel:
                         # safety crop if matrix exceeds target dimension
                         dm_np = dm_np[:, :target_K]
                     
-                    B_list.append(torch.from_numpy(dm_np).float().to(device))
+                    B_list.append(torch.from_numpy(dm_np).double().to(device))
                 
             B_all = torch.stack(B_list, dim=0)
             
@@ -226,7 +229,7 @@ class ComponentwiseBoostingModel:
                 try:
                     Inv = torch.linalg.inv(M)
                 except:
-                    Inv = torch.linalg.inv(M + torch.eye(n_k, device=device)*1e-6)
+                    Inv = torch.linalg.inv(M + torch.eye(n_k, device=device, dtype=torch.float64)*(1e-12 + lam * 1e-12))
                 S = Inv @ BtB
                 return torch.trace(S).item()
 
@@ -238,7 +241,7 @@ class ComponentwiseBoostingModel:
 
                 if torch.all(b_curr.abs() < 1e-9):
                     # zero matrix case if basis is completely flat
-                    Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device)
+                    Solver = torch.zeros(b_curr.shape[1], b_curr.shape[0], device=device, dtype=torch.float64)
                 else:
                     target = min(self.target_df, max_rank - 0.1)
                     
@@ -252,9 +255,9 @@ class ComponentwiseBoostingModel:
                     # compute penalized least squares solver matrix
                     BtB = b_curr.T @ b_curr
                     try:
-                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*self.eps_linear)
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*self.eps_linear)
                     except (torch._C._LinAlgError, RuntimeError):
-                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*1e-4)
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device, dtype=torch.float64)*(1e-6 + best_lam * 1e-12))
                     Solver = M_inv @ b_curr.T
                 
                 Solver_matrices.append(Solver)
@@ -263,12 +266,12 @@ class ComponentwiseBoostingModel:
             Solvers_stacked = torch.stack(Solver_matrices, dim=0)
             
             assets[learner_type] = {
-                'B_tilde': B_tilde,
-                'Solver': Solvers_stacked,
-                'Gamma': Gamma
+                'B_tilde': B_tilde.float(),
+                'Solver': Solvers_stacked.float(),
+                'Gamma': Gamma.float()
             }
             
-        return assets, X_lin_all
+        return assets, X_lin_all.float()
 
     # Legacy Solvers for single learner mode
     
