@@ -21,7 +21,7 @@ Traditional CWB algorithms are strictly greedy and "memoryless." At each iterati
 
 CompBoost is not just a wrapper; it is a mathematically rigorous recreation of boosting dynamics designed to solve complex real-world challenges, particularly in high-dimensional ($p \gg n$) and heterogeneous data environments.
 
-* **Competing Base Learners without Bias:** In real-world data, different features require different functional approximations. CompBoost allows diverse base learners (Linear, Polynomial, Decision Stumps, B-Splines) to compete dynamically. To prevent the inherent selection bias toward complex learners, CompBoost utilizes **orthogonal decomposition** and exact **Ridge/P-Spline penalization** based on targeted degrees of freedom ($df$).
+* **Competing Base Learners without Bias:** In real-world data, different features require different functional approximations. CompBoost allows diverse base learners (Linear, Polynomial, Decision Stumps, B-Splines) to compete dynamically. To prevent the inherent selection bias toward complex learners, CompBoost utilizes **orthogonal decomposition** and exact **Ridge/P-Spline penalization** based on targeted degrees of freedom $(df)$.
 * **Vectorized Non-Parametric Learners:** Features like histogram-binning for decision stumps and Cox-de Boor recursive B-Spline basis matrix generation are fully vectorized using PyTorch tensors, enabling massive computational speedups.
 
 Whether you are working with sparse genomic datasets requiring strictly additive interpretability, or heterogeneous tabular data requiring dynamic base-learner complexity, CompBoost provides a statistically rigorous, highly resilient, and blindingly fast solution.
