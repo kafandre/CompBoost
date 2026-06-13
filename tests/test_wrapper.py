@@ -164,3 +164,25 @@ def test_wrapper_invalid_base_learner(numpy_data):
     reg = TorchCompBoostRegressor(n_estimators=5, base_learner="invalid")
     with pytest.raises(ValueError, match="Invalid base_learner 'invalid'"):
         reg.fit(X, y)
+
+def test_wrapper_feature_names_and_validation(numpy_data):
+    """Verifies that feature_names_in_ is set for pandas DataFrames and predict checks feature shape."""
+    X, y = numpy_data
+    
+    # Mock a pandas DataFrame using a subclass of np.ndarray
+    class MockDataFrame(np.ndarray):
+        pass
+    
+    df = X.view(MockDataFrame)
+    df.columns = [f"feat_{i}" for i in range(X.shape[1])]
+    
+    reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
+    reg.fit(df, y)
+    
+    assert hasattr(reg, 'feature_names_in_')
+    assert list(reg.feature_names_in_) == [f"feat_{i}" for i in range(X.shape[1])]
+    
+    # Predict with wrong shape should raise ValueError
+    X_wrong = np.random.randn(10, X.shape[1] + 1)
+    with pytest.raises(ValueError, match="Number of features must match training data"):
+        reg.predict(X_wrong)

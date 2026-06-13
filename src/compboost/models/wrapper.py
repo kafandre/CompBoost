@@ -100,6 +100,9 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
             y_val = np.asarray(y_val)
             if y_val.ndim == 2 and y_val.shape[1] == 1:
                 y_val = y_val.ravel()
+        # Store feature names if X is a DataFrame
+        if hasattr(X, 'columns'):
+            self.feature_names_in_ = np.array(X.columns, dtype=object)
         # 1. Scikit-learn validation
         X, y = check_X_y(X, y, y_numeric=True)
         if X_val is not None and y_val is not None:
@@ -148,6 +151,8 @@ class TorchCompBoostRegressor(BaseEstimator, RegressorMixin):
         # 1. Scikit-learn validation
         check_is_fitted(self, 'is_fitted_')
         X = check_array(X)
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(f"Number of features must match training data. Got {X.shape[1]}, expected {self.n_features_in_}.")
 
         # 2. Predict using PyTorch engine
         preds = self.model_.predict(X, use_best_model=use_best_model)
