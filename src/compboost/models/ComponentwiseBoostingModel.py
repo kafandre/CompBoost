@@ -393,6 +393,7 @@ class ComponentwiseBoostingModel:
         losses = ((preds - target_rep)**2).mean(dim=1)
         return beta.squeeze(-1), losses
 
+    @torch.no_grad()
     def fit(self, X_train, y_train, X_val=None, y_val=None, X_test=None, y_test=None):
         valid_learners = {"linear", "polynomial", "tree", "bspline"}
         for learner in self.base_learners:
@@ -759,6 +760,7 @@ class ComponentwiseBoostingModel:
             if self.verbose > 0 and (i+1) % self.verbose == 0:
                 print(f"Iter {i+1}/{self.n_estimators} | Train MSE: {train_mse:.5f}")
 
+    @torch.no_grad()
     def predict(self, X, use_best_model=False):
         X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
 
