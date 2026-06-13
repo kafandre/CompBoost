@@ -109,7 +109,7 @@ class ComponentwiseBoostingModel:
             for i in range(n_features):
                 self.feature_momentum[i] = mom_vec[i].item()
                 
-            loss_std = torch.std(losses_tensor).detach()
+            loss_std = torch.std(losses_tensor).detach() if n_features > 1 else torch.tensor(0.0, device=losses_tensor.device)
             # compute scale factor for adjustment
             scale_factor = loss_std if loss_std > self.eps_momentum else 1.0
             adjustment = mom_vec * self.momentum_strength * scale_factor

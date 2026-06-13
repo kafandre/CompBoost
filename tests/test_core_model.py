@@ -269,3 +269,20 @@ def test_zero_estimators(synthetic_data):
     preds = model.predict(X)
     assert preds.shape == (X.shape[0],)
     assert torch.allclose(preds, torch.full_like(preds, np.mean(y)))
+
+def test_single_feature_momentum(synthetic_data):
+    """Verifies that momentum feature selection runs on 1-feature data without warnings/errors."""
+    X, y = synthetic_data
+    X_single = X[:, :1]
+    
+    model = ComponentwiseBoostingModel(
+        n_estimators=5,
+        base_learner="linear",
+        use_momentum=True,
+        momentum_decay=0.9,
+        momentum_strength=1.0
+    )
+    # This should run successfully without PyTorch UserWarnings
+    model.fit(X_single, y)
+    preds = model.predict(X_single)
+    assert preds.shape == (X_single.shape[0],)
