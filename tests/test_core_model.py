@@ -158,3 +158,21 @@ def test_device_migration_and_serialization(synthetic_data, tmp_path):
     preds_orig = model.predict(X)
     preds_loaded = loaded_model.predict(X)
     assert torch.allclose(preds_orig, preds_loaded)
+
+def test_constant_features_bspline(synthetic_data):
+    """Verifies that the model can handle constant features when using B-splines."""
+    X, y = synthetic_data
+    # Add a constant feature as the last column
+    X_const = np.column_stack([X, np.ones(X.shape[0])])
+    
+    # Test competing mode with bspline and linear
+    model_comp = ComponentwiseBoostingModel(n_estimators=5, base_learner=["bspline", "linear"], target_df=1.0)
+    model_comp.fit(X_const, y)
+    preds_comp = model_comp.predict(X_const)
+    assert preds_comp.shape == (X.shape[0],)
+    
+    # Test legacy mode with bspline
+    model_leg = ComponentwiseBoostingModel(n_estimators=5, base_learner="bspline")
+    model_leg.fit(X_const, y)
+    preds_leg = model_leg.predict(X_const)
+    assert preds_leg.shape == (X.shape[0],)

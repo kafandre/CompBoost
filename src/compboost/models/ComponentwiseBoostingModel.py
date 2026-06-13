@@ -148,9 +148,12 @@ class ComponentwiseBoostingModel:
         # Precompute projection matrices
         XTX = torch.bmm(X_lin_all.transpose(1, 2), X_lin_all)
         # Regularize matrix for numerical stability
-        XTX += torch.eye(2, device=device).unsqueeze(0) * self.eps_linear
-        
-        Gamma_proj = torch.linalg.solve(XTX, X_lin_all.transpose(1, 2))
+        XTX_reg = XTX + torch.eye(2, device=device).unsqueeze(0) * self.eps_linear
+        try:
+            Gamma_proj = torch.linalg.solve(XTX_reg, X_lin_all.transpose(1, 2))
+        except (torch._C._LinAlgError, RuntimeError):
+            XTX_fallback = XTX + torch.eye(2, device=device).unsqueeze(0) * 1e-4
+            Gamma_proj = torch.linalg.solve(XTX_fallback, X_lin_all.transpose(1, 2))
 
         for learner_type in self.base_learners:
             if learner_type == 'tree' or learner_type == 'linear':
@@ -181,14 +184,19 @@ class ComponentwiseBoostingModel:
 
                 for i in range(n_features):
                     # Determine knots with quantiles
-                    percentiles = np.linspace(0, 100, self.n_knots + 2)
-                    knots_all = np.unique(np.percentile(X_np[:, i], percentiles))
-                    if len(knots_all) < 2:
-                        # Fallback for constant features to prevent singular matrices
-                        knots_all = np.array([X_np[:, i].min(), X_np[:, i].max()])
+                    f_min, f_max = X_np[:, i].min(), X_np[:, i].max()
+                    if f_min == f_max:
+                        # Jitter boundaries and create a uniformly spaced grid
+                        f_min = f_min - 1.0
+                        f_max = f_max + 1.0
+                        knots_all = np.linspace(f_min, f_max, self.n_knots + 2)
+                    else:
+                        percentiles = np.linspace(0, 100, self.n_knots + 2)
+                        knots_all = np.unique(np.percentile(X_np[:, i], percentiles))
+                        if len(knots_all) < 2:
+                            knots_all = np.array([f_min, f_max])
                         
                     # Construct full knot vector
-                    f_min, f_max = X_np[:, i].min(), X_np[:, i].max()
                     t = np.concatenate(([f_min]*self.spline_degree, [f_min], knots_all[1:-1], [f_max], [f_max]*self.spline_degree))
                     self.feature_knots_[i] = t
                     
@@ -249,7 +257,10 @@ class ComponentwiseBoostingModel:
 
                     # compute penalized least squares solver matrix
                     BtB = b_curr.T @ b_curr
-                    M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*self.eps_linear)
+                    try:
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*self.eps_linear)
+                    except (torch._C._LinAlgError, RuntimeError):
+                        M_inv = torch.linalg.inv(BtB + best_lam * Omega + torch.eye(BtB.shape[0], device=device)*1e-4)
                     Solver = M_inv @ b_curr.T
                 
                 Solver_matrices.append(Solver)
@@ -300,7 +311,11 @@ class ComponentwiseBoostingModel:
         ATA_reg = ATA + self.eps_linear * I
 
         # solve regularized normal equations
-        beta = torch.linalg.solve(ATA_reg, ATY)
+        try:
+            beta = torch.linalg.solve(ATA_reg, ATY)
+        except (torch._C._LinAlgError, RuntimeError):
+            ATA_reg_fallback = ATA + 1e-4 * I
+            beta = torch.linalg.solve(ATA_reg_fallback, ATY)
         preds = torch.bmm(A, beta).squeeze(-1)
         target_rep = target.unsqueeze(0)
 
@@ -372,7 +387,11 @@ class ComponentwiseBoostingModel:
         ATA_reg = ATA + self.eps_linear * I
 
         # compute regularized system matrices and solve for spline coefficients
-        beta = torch.linalg.solve(ATA_reg, ATY)
+        try:
+            beta = torch.linalg.solve(ATA_reg, ATY)
+        except (torch._C._LinAlgError, RuntimeError):
+            ATA_reg_fallback = ATA + 1e-4 * I
+            beta = torch.linalg.solve(ATA_reg_fallback, ATY)
         preds = torch.bmm(A, beta).squeeze(-1)
         target_rep = target.unsqueeze(0)
 
@@ -423,12 +442,17 @@ class ComponentwiseBoostingModel:
             X_train_np = X_train.detach().cpu().numpy()
             for f_idx in range(n_features):
                 if f_idx not in self.feature_knots_: 
-                    percentiles = np.linspace(0, 100, self.n_knots + 2)
-
-                    # Determine knots
-                    knots_all = np.unique(np.percentile(X_train_np[:, f_idx], percentiles))
-                    if len(knots_all) < 2: knots_all = np.array([X_train_np[:, f_idx].min(), X_train_np[:, f_idx].max()])
                     f_min, f_max = X_train_np[:, f_idx].min(), X_train_np[:, f_idx].max()
+                    if f_min == f_max:
+                        # Jitter boundaries and create a uniformly spaced grid
+                        f_min = f_min - 1.0
+                        f_max = f_max + 1.0
+                        knots_all = np.linspace(f_min, f_max, self.n_knots + 2)
+                    else:
+                        percentiles = np.linspace(0, 100, self.n_knots + 2)
+                        knots_all = np.unique(np.percentile(X_train_np[:, f_idx], percentiles))
+                        if len(knots_all) < 2:
+                            knots_all = np.array([f_min, f_max])
 
                     # Construct knot vector
                     t = np.concatenate(([f_min]*self.spline_degree, [f_min], knots_all[1:-1], [f_max], [f_max]*self.spline_degree))
