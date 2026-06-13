@@ -74,8 +74,9 @@ print(f"Test MSE: {mean_squared_error(y_test, preds):.4f}")
 ```
 
 ## 📚 Citation & Background
+This library implements the momentum-based feature selection regularizer and advanced CWB mechanics developed by André Kafanke. 
 
-This library implements the momentum-based feature selection regularizer introduced in the master thesis of André Kafanke. If you use this software in academic research, please link back to this repository.
+**A formal academic paper detailing the theoretical proofs and extensive benchmarking of this methodology is currently in preparation.** If you use this software in your research, please link back to this GitHub repository. A formal citation (BibTeX) will be provided here once the paper/preprint is published.
 
 ## 📄 License
 
