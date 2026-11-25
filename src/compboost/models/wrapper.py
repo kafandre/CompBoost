@@ -117,15 +117,10 @@ class TorchCompBoostRegressor(RegressorMixin, BaseEstimator):
                 )
                 y_val = y_val.ravel()
 
-        original_columns = getattr(X, 'columns', None)
-
         # 1. Scikit-learn validation
         X, y = validate_data(self, X=X, y=y, y_numeric=True)
         if X_val is not None and y_val is not None:
             X_val, y_val = validate_data(self, X=X_val, y=y_val, y_numeric=True, reset=False)
-
-        if original_columns is not None and not hasattr(self, 'feature_names_in_'):
-            self.feature_names_in_ = np.array(original_columns, dtype=object)
 
         # 2. Initialize PyTorch engine
         self.model_ = ComponentwiseBoostingModel(

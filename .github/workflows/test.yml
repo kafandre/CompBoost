@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
     - name: Checkout repository
@@ -28,8 +28,31 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest
-        pip install -e .
+        pip install -e ".[test]"
+
+    - name: Run tests with pytest
+      run: |
+        pytest
+
+  test-minimum-versions:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        cache-dependency-path: 'pyproject.toml'
+
+    - name: Install minimum dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[test]" \
+          "torch==2.3.0" "scikit-learn==1.6.0" "numpy==1.21.6" "scipy==1.8.0"
 
     - name: Run tests with pytest
       run: |

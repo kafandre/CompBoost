@@ -1,5 +1,11 @@
+import subprocess
+import sys
+import textwrap
+import warnings
+
 import pytest
 import numpy as np
+import pandas as pd
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV
 from compboost.models.wrapper import TorchCompBoostRegressor
@@ -168,14 +174,8 @@ def test_wrapper_invalid_base_learner(numpy_data):
 def test_wrapper_feature_names_and_validation(numpy_data):
     """Verifies that feature_names_in_ is set for pandas DataFrames and predict checks feature shape."""
     X, y = numpy_data
-    
-    # Mock a pandas DataFrame using a subclass of np.ndarray
-    class MockDataFrame(np.ndarray):
-        pass
-    
-    df = X.view(MockDataFrame)
-    df.columns = [f"feat_{i}" for i in range(X.shape[1])]
-    
+    df = pd.DataFrame(X, columns=[f"feat_{i}" for i in range(X.shape[1])])
+
     reg = TorchCompBoostRegressor(n_estimators=5, base_learner="linear")
     reg.fit(df, y)
     
@@ -186,6 +186,46 @@ def test_wrapper_feature_names_and_validation(numpy_data):
     X_wrong = np.random.randn(10, X.shape[1] + 1)
     with pytest.raises(ValueError, match="Number of features must match|is expecting"):
         reg.predict(X_wrong)
+
+def test_wrapper_integer_column_names(numpy_data):
+    """Non-string column names must not set feature_names_in_ or warn."""
+    X, y = numpy_data
+    df = pd.DataFrame(X)
+
+    reg = TorchCompBoostRegressor(n_estimators=5, verbose=0)
+    reg.fit(df, y)
+
+    assert not hasattr(reg, "feature_names_in_")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        reg.predict(df)
+
+
+def test_wrapper_read_only_input():
+    """Read-only arrays must not trigger PyTorch's non-writable warning."""
+    # PyTorch emits this warning once per process, hence the subprocess.
+    script = textwrap.dedent(
+        """
+        import numpy as np
+        from compboost import TorchCompBoostRegressor
+
+        X = np.random.rand(30, 3).astype(np.float32)
+        y = X[:, 0].copy()
+        X.setflags(write=False)
+        y.setflags(write=False)
+        reg = TorchCompBoostRegressor(n_estimators=3, verbose=0)
+        reg.fit(X, y, X_val=X, y_val=y)
+        reg.predict(X)
+        reg.model_.fit(X, y, X_test=X, y_test=y)
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "not writable" not in result.stderr
+
 
 def test_serialization_cross_loading(numpy_data, tmp_path):
     """Verifies that loading mismatched serialized types raises TypeError."""
