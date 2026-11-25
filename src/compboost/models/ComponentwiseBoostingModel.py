@@ -4,6 +4,13 @@ from typing import Optional, Union, Tuple, List, Dict
 from scipy.interpolate import BSpline
 from scipy.optimize import minimize_scalar
 
+def _as_float_tensor(data, device):
+    """Converts data to a float32 tensor, copying read-only NumPy arrays."""
+    if isinstance(data, np.ndarray):
+        data = np.require(data, requirements="W")
+    return torch.as_tensor(data, dtype=torch.float32, device=device)
+
+
 class ComponentwiseBoostingModel:
     def __init__(
         self, 
@@ -420,8 +427,8 @@ class ComponentwiseBoostingModel:
         if (X_test is not None) != (y_test is not None):
             raise ValueError("Both X_test and y_test must be provided together for testing tracking.")
         # Convert inputs to tensors and push to device
-        X_train = torch.as_tensor(X_train, dtype=torch.float32, device=self.device)
-        y_train = torch.as_tensor(y_train, dtype=torch.float32, device=self.device)
+        X_train = _as_float_tensor(X_train, self.device)
+        y_train = _as_float_tensor(y_train, self.device)
         
         # Target shape validation and flattening
         if y_train.ndim > 2 or (y_train.ndim == 2 and y_train.shape[1] > 1):
@@ -435,8 +442,8 @@ class ComponentwiseBoostingModel:
             raise ValueError("Target y_train contains NaN or Infinity. Please clean your data.")
 
         if X_val is not None:
-            X_val = torch.as_tensor(X_val, dtype=torch.float32, device=self.device)
-            y_val = torch.as_tensor(y_val, dtype=torch.float32, device=self.device)
+            X_val = _as_float_tensor(X_val, self.device)
+            y_val = _as_float_tensor(y_val, self.device)
             if y_val.ndim > 2 or (y_val.ndim == 2 and y_val.shape[1] > 1):
                 raise ValueError("Multi-output targets are not supported. Target y_val must be 1D or shape (n_samples, 1).")
             y_val = y_val.flatten()
@@ -445,8 +452,8 @@ class ComponentwiseBoostingModel:
                 raise ValueError("Validation set X_val or y_val contains NaN or Infinity.")
 
         if X_test is not None:
-            X_test = torch.as_tensor(X_test, dtype=torch.float32, device=self.device)
-            y_test = torch.as_tensor(y_test, dtype=torch.float32, device=self.device)
+            X_test = _as_float_tensor(X_test, self.device)
+            y_test = _as_float_tensor(y_test, self.device)
             if y_test.ndim > 2 or (y_test.ndim == 2 and y_test.shape[1] > 1):
                 raise ValueError("Multi-output targets are not supported. Target y_test must be 1D or shape (n_samples, 1).")
             y_test = y_test.flatten()
@@ -823,7 +830,7 @@ class ComponentwiseBoostingModel:
 
     @torch.no_grad()
     def predict(self, X, use_best_model=False):
-        X = torch.as_tensor(X, dtype=torch.float32, device=self.device)
+        X = _as_float_tensor(X, self.device)
 
         # Input validation
         if torch.isnan(X).any() or torch.isinf(X).any():
